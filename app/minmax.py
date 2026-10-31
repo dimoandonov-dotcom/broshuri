@@ -116,3 +116,42 @@ def names(codes: list[int]) -> dict[int, str]:
     with eng.connect() as c:
         return {int(k): v for k, v in c.execute(text("SELECT code, name FROM sa_articles WHERE code = ANY(:c)"),
                                                 {"c": [int(x) for x in codes]})}
+
+
+def search(q: str, supplier: str | None = None, limit: int = 40) -> list[dict]:
+    """Артикули по код, баркод (през Мистрал) или части от името - с доставчика и продажбите за 30 дни."""
+    eng = engine()
+    q = (q or "").strip()
+    if not eng or not q:
+        return []
+    codes: list[int] = []
+    if q.isdigit() and len(q) >= 8:
+        try:
+            from . import mistral
+            res, _ = mistral.enrich([{"id": 0, "barcode": q, "code": None}])
+            codes = [r["code"] for r in res if r.get("code")]
+        except Exception:  # noqa: BLE001
+            codes = []
+    where, params = [], {"lim": limit}
+    if codes:
+        where.append("a.code = ANY(:codes)")
+        params["codes"] = codes
+    elif q.isdigit():
+        where.append("CAST(a.code AS TEXT) LIKE :cp")
+        params["cp"] = q + "%"
+    else:
+        for i, w in enumerate(q.upper().split()[:5]):
+            where.append(f"UPPER(a.name) LIKE :w{i}")
+            params[f"w{i}"] = f"%{w}%"
+    if supplier:
+        where.append("a.supplier = :sup")
+        params["sup"] = supplier
+    with eng.connect() as c:
+        last = c.execute(text("SELECT MAX(day) FROM sa_sales")).scalar()
+        params["d"] = last - timedelta(days=30)
+        return [{"code": r[0], "name": r[1], "supplier": r[2] or "", "sales30": int(round(float(r[3] or 0)))}
+                for r in c.execute(text(f"""
+                    SELECT a.code, a.name, a.supplier, COALESCE(SUM(s.qty), 0) AS q
+                    FROM sa_articles a LEFT JOIN sa_sales s ON s.code = a.code AND s.day > :d
+                    WHERE {' AND '.join(where)} GROUP BY a.code, a.name, a.supplier
+                    ORDER BY q DESC LIMIT :lim"""), params)]

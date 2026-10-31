@@ -5,19 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Брошури</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600;700;800&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 :root{
-  --bg:#eef1f4; --surface:#fff; --sunk:#e3e8ee; --line:#d3dae2;
-  --fg:#18202a; --muted:#5d6876; --pen:#c0193f; --pen-soft:#fbe6eb;
-  --ok:#1d7a4c; --ok-soft:#e2f3ea; --warn:#a86500; --warn-soft:#fbf0dc; --bad:#b3261e; --bad-soft:#fbe4e2;
+  /* Family 300: въглен, крем и опалено оранжево, с искри */
+  --bg:#f6efe3; --surface:#fffbf4; --sunk:#ede3d2; --line:#e1d4bf;
+  --fg:#2b2a28; --muted:#75695b; --pen:#c9561a; --pen-soft:#fbe4d3; --char:#2b2a28; --cream:#f6efe3;
+  --ok:#2f7a4a; --ok-soft:#e1f0e3; --warn:#a86500; --warn-soft:#fbefd6; --bad:#b3261e; --bad-soft:#fbe2df;
   --f-d:"Unbounded","Golos Text",system-ui,sans-serif; --f-b:"Golos Text",system-ui,-apple-system,sans-serif;
-  --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:light;
+  --f-s:"Caveat","Segoe Script",cursive; --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#11161c; --surface:#19212a; --sunk:#222c37; --line:#2e3a47; --fg:#e8edf2; --muted:#93a0ae;
-  --pen:#ff5a7d; --pen-soft:#3a1822; --ok:#4fc58a; --ok-soft:#163327; --warn:#f0a83a; --warn-soft:#3a2a10;
-  --bad:#ff7a70; --bad-soft:#3d1a18; color-scheme:dark}}
+  --bg:#1f1d1b; --surface:#2a2724; --sunk:#35312d; --line:#44403a; --fg:#f3eadb; --muted:#b3a592;
+  --pen:#f07b3a; --pen-soft:#43281a; --char:#141312; --cream:#f3eadb; --ok:#5fc68a; --ok-soft:#173226;
+  --warn:#f0a83a; --warn-soft:#3a2a10; --bad:#ff7a70; --bad-soft:#3d1a18; color-scheme:dark}}
 *{box-sizing:border-box}
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-b)}
@@ -80,6 +81,27 @@ textarea{width:100%;min-height:44px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:.85rem;z-index:9;max-width:90vw}
 .back{font-size:.9rem;color:var(--muted);text-decoration:none}
 @media(max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}.fld input{width:74px}}
+
+.hero{position:relative;overflow:hidden;background:var(--char);color:var(--cream);border-radius:18px;padding:18px 18px 20px;display:flex;gap:16px;align-items:center}
+.hero .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.hero .hi{font-family:var(--f-s);font-size:1.6rem;color:#f3a66f;line-height:1}
+.hero .ph{font-size:1.02rem;line-height:1.4;text-wrap:balance;opacity:0;animation:rise .9s .35s ease forwards}
+.hero .dt{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#bfb2a0}
+.logo{flex:none;display:block}
+.logo .spk{stroke:#e8772e;stroke-width:3;stroke-linecap:round;stroke-dasharray:14;stroke-dashoffset:14;animation:spark 2.8s ease-out infinite}
+.logo .spk:nth-child(2n){animation-delay:.25s}.logo .spk:nth-child(3n){animation-delay:.5s}
+.logo .num{font-family:var(--f-d);font-weight:800}
+.logo .scr{font-family:var(--f-s);font-weight:700}
+.logo .pop{transform-origin:60px 66px;animation:pop .8s cubic-bezier(.2,1.4,.4,1) both}
+.burst{position:absolute;inset:0;pointer-events:none;opacity:.18;background:radial-gradient(circle at 92% 10%,#e8772e 0 2px,transparent 3px),radial-gradient(circle at 80% 85%,#e8772e 0 2px,transparent 3px),radial-gradient(circle at 60% 20%,#f3a66f 0 1.5px,transparent 2.5px)}
+.login .hero{flex-direction:column;text-align:center;padding:26px 18px}
+.login .btn{justify-content:center}
+@keyframes spark{0%{stroke-dashoffset:14;opacity:0}15%{opacity:1}55%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:-14;opacity:0}}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.search{width:100%;font-size:1rem;padding:11px 12px}
+.hit{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line);cursor:pointer;background:none;border-left:0;border-right:0;border-top:0;width:100%;text-align:left;font:inherit;color:inherit}
+@media (prefers-reduced-motion:reduce){.logo .spk,.logo .pop,.hero .ph{animation:none;opacity:1;stroke-dashoffset:0}}
 </style>
 </head>
 <body>
@@ -105,8 +127,30 @@ async function api(p,o={}){
 }
 const post=(p,b)=>api(p,{method:"POST",body:JSON.stringify(b)});
 
-function renderLogin(msg){
-  app.innerHTML=`<form class="login card" id="lf"><h1>Брошури</h1>
+let TODAY=null;
+async function today(){if(!TODAY){try{TODAY=await (await fetch("/api/today")).json()}catch(e){TODAY={phrase:""}}}return TODAY}
+function logo(sz=96){
+  if(TODAY&&TODAY.logo)return `<img class="logo" src="${esc(TODAY.logo)}" alt="Магазини 300" style="height:${sz}px">`;
+  const sp=[[60,6,60,-6],[96,18,104,10],[112,52,124,50],[24,18,16,10],[8,52,-4,50],[100,94,108,102],[20,94,12,102]];
+  return `<svg class="logo" width="${sz*1.1}" height="${sz}" viewBox="-8 -10 136 120" aria-label="Магазини 300" role="img">
+    <g>${sp.map(([a,b,c,d])=>`<line class="spk" x1="${a}" y1="${b}" x2="${c}" y2="${d}"/>`).join("")}</g>
+    <g class="pop"><text class="scr" x="60" y="40" text-anchor="middle" font-size="26" fill="#f3a66f">Family</text>
+    <text class="num" x="60" y="86" text-anchor="middle" font-size="50" fill="#f6efe3" letter-spacing="-2">300</text>
+    <rect x="22" y="94" width="76" height="4" rx="2" fill="#e8772e"/></g></svg>`;
+}
+function hello(){const h=new Date().getHours();return h<11?"Добро утро":h<18?"Добър ден":"Добър вечер"}
+const NAMES={asen:"Асен",dimo:"Димо",ofis:"екип"};
+function heroHTML(){
+  const d=new Date().toLocaleDateString("bg-BG",{weekday:"long",day:"numeric",month:"long"});
+  return `<div class="hero"><div class="burst"></div>${logo(84)}<div class="tx">
+    <div class="hi">${hello()}${ME?", "+esc(NAMES[ME.user]||ME.user):""}!</div>
+    <div class="ph">${esc(TODAY&&TODAY.phrase||"")}</div><div class="dt">${esc(d)} · Магазини 300</div></div></div>`;
+}
+
+async function renderLogin(msg){
+  await today();
+  app.innerHTML=`<form class="login" id="lf"><div class="hero"><div class="burst"></div>${logo(120)}<div class="ph">${esc(TODAY.phrase||"")}</div></div>
+   <h1 style="text-align:center">Брошури</h1>
    <input class="inp" id="lu" placeholder="Потребител" autocomplete="username" autocapitalize="none">
    <input class="inp" id="lp" placeholder="ПИН" type="password" inputmode="numeric" autocomplete="current-password">
    <button class="btn pri" type="submit">Вход</button><div class="muted">${esc(msg||"")}</div></form>`;
@@ -114,10 +158,11 @@ function renderLogin(msg){
 }
 
 async function renderList(){
-  const forms=await api("/api/forms");
+  const [forms]=await Promise.all([api("/api/forms"),today()]);
   const cnt=k=>forms.filter(x=>k==="all"||x.status===k).length;
   const shown=forms.filter(x=>FILTER==="all"||x.status===FILTER);
-  app.innerHTML=`<div class="top"><h1>Брошури</h1><span class="sp"></span><span class="muted">${esc(ME.user)}</span><button class="btn" id="lo">Изход</button></div>
+  app.innerHTML=`<div class="top"><h1>Брошури <span>300</span></h1><span class="sp"></span><button class="btn" id="lo">Изход</button></div>
+  ${heroHTML()}
   ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
      <b>Качи бланки</b><br><span class="muted">Excel, PDF или снимка - може няколко наведнъж</span></label>
      <div class="top"><span class="muted">Бланките по имейл се прибират сами на 5 мин.</span><span class="sp"></span><button class="btn" id="mc">Провери пощата</button></div>
@@ -221,7 +266,9 @@ async function saveItem(inp){
   else body[k]=k==="sales30"||k==="code"?Math.round(v):v;
   try{FORM=await post("/api/items/"+id,body);const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y)}catch(e){toast(e.message)}
 }
-let SUPS=null, ARTS=[], PICK=new Set();
+let SUPS=null, ARTS=[], PICK=new Set(), QRY="", QT=null;
+const matches=(a,q)=>{q=q.trim().toUpperCase();if(!q)return true;if(/^\d+$/.test(q))return String(a.code).startsWith(q);
+  return q.split(/\s+/).every(w=>(a.name||"").toUpperCase().includes(w))};
 async function renderNew(){
   if(!SUPS)SUPS=await api("/api/suppliers");
   const today=new Date().toISOString().slice(0,10);
@@ -236,15 +283,33 @@ async function renderNew(){
       <div class="fld"><label for="rt">до</label><input class="inp" type="date" id="rt"></div></div>
     <div class="r"><label><input type="checkbox" id="rv" checked> Варна</label><label><input type="checkbox" id="rs" checked> София</label></div>
   </div>
+  <div class="card dec"><input class="inp search" id="q" type="search" placeholder="Търси артикул: име, код или баркод" autocomplete="off">
+    <div id="hits"></div></div>
   <div id="arts"></div>
   <button class="btn pri" id="mk" disabled style="justify-content:center">Създай бланката</button>`;
   const pf=$("#pf"),rf=$("#rf");
   pf.onchange=()=>{if(pf.value&&!rf.value){const d=new Date(pf.value);d.setDate(d.getDate()-7);rf.value=d.toISOString().slice(0,10)}};
   $("#pt").onchange=()=>{const t=$("#pt").value;if(t&&!$("#rt").value){const d=new Date(t);d.setDate(d.getDate()+7);$("#rt").value=d.toISOString().slice(0,10)}};
-  $("#sup").onchange=async()=>{
-    const n=$("#sup").value.trim();if(!SUPS.some(x=>x.supplier===n))return;
-    $("#arts").innerHTML=`<div class="card muted">Зареждам артикулите…</div>`;
-    ARTS=await api("/api/suppliers/articles?name="+encodeURIComponent(n));PICK=new Set();drawArts();
+  const loadSup=async(n,pre)=>{
+    $("#sup").value=n;$("#arts").innerHTML=`<div class="card muted">Зареждам артикулите…</div>`;
+    ARTS=await api("/api/suppliers/articles?name="+encodeURIComponent(n));PICK=new Set(pre?[pre]:[]);
+    if(pre&&!ARTS.some(a=>a.code===pre))QRY="";drawArts();
+  };
+  $("#sup").onchange=()=>{const n=$("#sup").value.trim();if(SUPS.some(x=>x.supplier===n)){QRY="";$("#q").value="";$("#hits").innerHTML="";loadSup(n)}};
+  $("#q").oninput=()=>{
+    QRY=$("#q").value;clearTimeout(QT);
+    const local=ARTS.length&&!/^\d{8,}$/.test(QRY.trim());
+    if(local){drawArts();if(ARTS.some(a=>matches(a,QRY))){$("#hits").innerHTML="";return}}
+    if(QRY.trim().length<2){$("#hits").innerHTML="";return}
+    QT=setTimeout(async()=>{
+      const r=await api("/api/articles/search?q="+encodeURIComponent(QRY.trim()));
+      $("#hits").innerHTML=r.length?`<div class="muted" style="padding-top:8px">${ARTS.length?"Няма го при този доставчик. Намерих го тук:":"Резултати:"}</div>`+
+        r.map(a=>`<button type="button" class="hit" data-s="${esc(a.supplier)}" data-c="${a.code}"><div style="flex:1;min-width:0">
+          <div class="it-n">${esc(a.name)}</div><div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./30 д.</span><span>${esc(a.supplier||"без доставчик")}</span></div></div>
+          <span class="badge b-pending">Избери</span></button>`).join(""):`<div class="muted" style="padding-top:8px">Няма такъв артикул.</div>`;
+      $("#hits").querySelectorAll(".hit").forEach(b=>b.onclick=()=>{if(!b.dataset.s){toast("Артикулът няма доставчик в MinMaxAI");return}
+        QRY="";$("#q").value="";$("#hits").innerHTML="";loadSup(b.dataset.s,+b.dataset.c);toast("Избран е доставчикът и артикулът")});
+    },300);
   };
   $("#mk").onclick=async()=>{
     $("#mk").disabled=true;toast("Създавам бланката…");
@@ -258,9 +323,10 @@ async function renderNew(){
 function drawArts(){
   const box=$("#arts");
   if(!ARTS.length){box.innerHTML=`<div class="card muted">Няма продавани артикули от този доставчик.</div>`;return}
+  const list=ARTS.filter(a=>matches(a,QRY)||PICK.has(a.code));
   box.innerHTML=`<div class="card"><div class="r" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-bottom:6px">
-     <b>${ARTS.length} артикула</b><span class="muted" id="cnt"></span><button class="btn" id="top">Топ 10 по продажби</button></div>
-   ${ARTS.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
+     <b>${QRY.trim()?`${list.length} от ${ARTS.length}`:ARTS.length} артикула</b><span class="muted" id="cnt"></span><button class="btn" id="top">Топ 10 по продажби</button></div>
+   ${list.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
       <input type="checkbox" data-c="${a.code}" ${PICK.has(a.code)?"checked":""} style="width:20px;height:20px">
       <div style="flex:1;min-width:0"><div class="it-n">${esc(a.name)}</div>
       <div class="prices"><span><b>${a.sales30}</b> бр./30 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}

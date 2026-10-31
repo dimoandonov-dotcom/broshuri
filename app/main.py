@@ -167,6 +167,24 @@ def supplier_articles(name: str, user: dict = Depends(need("office"))):
     return minmax.articles(name)
 
 
+@app.get("/api/articles/search")
+async def article_search(q: str, supplier: str | None = None, user: dict = Depends(need("office"))):
+    from . import minmax
+    return await run_in_threadpool(minmax.search, q, supplier)
+
+
+@app.get("/api/today")
+def today_phrase():
+    from zoneinfo import ZoneInfo
+    d = datetime.now(ZoneInfo("Europe/Sofia")).date()
+    try:
+        from .phrases import today_phrase as tp
+        return {"phrase": tp(d), "logo": os.getenv("LOGO_URL", "")}
+    except Exception:  # noqa: BLE001
+        return {"phrase": "Всяка цена в брошурата е обещание към квартала. Нека е честно и печелившо.",
+                "logo": os.getenv("LOGO_URL", "")}
+
+
 class NewForm(BaseModel):
     supplier: str
     codes: list[int]
