@@ -94,7 +94,16 @@ ITEM_COLS = ("name", "barcode", "saft", "base", "to_pct", "reg", "dto_pct", "pro
 def enrich_form(form_id: int) -> list[str]:
     items = db.rows("SELECT id, barcode, code FROM items WHERE form_id=:f ORDER BY pos", f=form_id)
     res, notes = mistral.enrich(items)
+    from . import minmax
+    mm, mm_notes = minmax.info([r["code"] for r in res if r.get("code")])
+    notes += mm_notes
     for r in res:
+        x = mm.get(r.get("code") or -1, {})
+        if x.get("mm_sales30") is not None:
+            r["sales30"] = x["mm_sales30"]
+        db.q("""UPDATE items SET margin30=:a, stock=:b, stores=:c, last_promo=:d, uplift=:e WHERE id=:id""",
+             id=r["id"], a=x.get("margin30"), b=x.get("stock"), c=x.get("mm_stores"),
+             d=x.get("last_promo"), e=x.get("uplift"))
         db.q("""UPDATE items SET code=:code, m_name=COALESCE(:m_name, m_name), shelf=COALESCE(:shelf, shelf),
                 avg_delivery=:avg_delivery, sales30=:sales30, sales30_varna=:sv, sales30_sofia=:ss,
                 enriched_at=now() WHERE id=:id""",
@@ -303,8 +312,10 @@ def health():
 @app.get("/api/admin/probe")
 async def probe(barcode: str, user: dict = Depends(need())):
     """Проверка на Мистрал по един баркод (само за админ)."""
+    from . import minmax
     res, notes = await run_in_threadpool(mistral.enrich, [{"id": 0, "barcode": barcode, "code": None}])
-    return {"result": res, "notes": notes}
+    mm, n2 = await run_in_threadpool(minmax.info, [r["code"] for r in res if r.get("code")])
+    return {"result": res, "minmax": mm, "notes": notes + n2}
 
 
 @app.post("/api/mail/check")

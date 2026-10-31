@@ -157,7 +157,9 @@ function itemHTML(it,kind){
     <div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
     <div class="prices"><span>Редовна дост. <b>${f(it.reg,4)}</b></span><span>Промо дост. <b>${f(it.cost,4)}</b></span>${sup}
-      ${it.reg_margin!=null?`<span>Марж сега <b>${f(it.reg_margin,1)}%</b></span>`:""}${fund}</div>
+      ${it.reg_margin!=null?`<span>Марж сега <b>${f(it.reg_margin,1)}%</b></span>`:""}${it.margin30!=null?`<span>Марж каса 30 д. <b>${f(it.margin30,1)}%</b></span>`:""}${fund}</div>
+    ${it.stock!=null||it.last_promo?`<div class="prices">${it.stock!=null?`<span>Наличност <b>${it.stock}</b> бр.${it.stores?` · продава се в ${it.stores} м-на`:""}</span>`:""}
+      ${it.last_promo?`<span>Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · продажби <b class="${it.uplift>=1.5?"g-ok":""}">×${f(it.uplift,1)}</b>`:""}</span>`:`<span>Не е бил в брошура</span>`}</div>`:""}
     <div class="entry">
       <div class="fld"><label>Продажби 30 д.</label><input data-k="sales30" inputmode="numeric" value="${it.sales30??""}" title="Варна ${it.sales30_varna??"—"} · София ${it.sales30_sofia??"—"}"></div>
       ${it.code?"":`<div class="fld"><label>Наш код</label><input data-k="code" inputmode="numeric" value=""></div>`}

@@ -138,6 +138,16 @@ def parse(data: bytes, name: str, ctype: str = "") -> dict:
     if not kind:
         raise ValueError("Непознат файл. Качи Excel, PDF или снимка.")
     if kind == "excel":
+        from .template import parse_template
+        try:
+            t = parse_template(data, name)
+        except Exception:  # noqa: BLE001
+            t = None
+        if t:
+            return t
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise ValueError("Този файл не е в нашия Excel шаблон. За PDF и снимки трябва ANTHROPIC_API_KEY.")
+    if kind == "excel":
         content = [{"type": "text", "text": "Съдържание на Excel файла (колоните са разделени с табулация):\n\n"
                     + excel_to_text(data, name)}]
     elif kind == "pdf":
