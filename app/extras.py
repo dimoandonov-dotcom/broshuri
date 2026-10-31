@@ -182,81 +182,203 @@ def fill_original(form: dict, items: list[dict]) -> bytes | None:
 
 
 def blank_xlsx(form: dict, items: list[dict]) -> bytes:
-    """Бланката на веригата (Приложение 6Б) с нашите цени. Същите заглавия като шаблона,
-    така че ако доставчикът я върне попълнена, системата я чете обратно."""
+    """Бланката на веригата (Приложение 6Б, при компенсация 6Г) - същият вид и текстове като хартиената.
+    Заглавията са като в шаблона, затова ако доставчикът я върне попълнена, системата я чете обратно."""
     import openpyxl
+    from datetime import date
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.worksheet.page import PageMargins
+    comp = form.get("kind") == "comp"
+    office = form.get("source") == "office"
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Заявка"
-    bold, red = Font(bold=True), Font(bold=True, color="C0193F")
-    grey = PatternFill("solid", fgColor="D9D9D9")
-    yellow = PatternFill("solid", fgColor="FFF2CC")
-    thin = Side(style="thin", color="999999")
+    F = lambda **k: Font(name="Arial", **k)  # noqa: E731
+    fill = lambda c: PatternFill("solid", fgColor=c)  # noqa: E731
+    DARK, GREY, YEL, BLUE = fill("595959"), fill("D9D9D9"), fill("FFF2CC"), fill("DDEBF7")
+    thin, med = Side(style="thin", color="7F7F7F"), Side(style="medium", color="404040")
     box = Border(left=thin, right=thin, top=thin, bottom=thin)
-    office = form.get("source") == "office"
-    ws.append(["Приложение № 6Б към Договор за търговско сътрудничество"])
-    ws.append([f"Заявка № {form.get('brochure_no') or '___'} за участие в РЕКЛАМНА БРОШУРА от Доставчик:",
-               None, None, None, None, None, None, None, form.get("supplier") or ""])
-    ws["A2"].font = Font(bold=True, size=13)
-    ws["I2"].font = Font(bold=True, size=13)
-    ws.append([])
-    ws.append(["Брошура — период на промоцията:", None, None, "от", form.get("promo_from"), "до", form.get("promo_to")])
-    ws.append(["Период на промоционалните доставни цени:", None, None, "от", form.get("price_from"), "до",
-               form.get("price_to")])
-    ws.append([])
-    ws.append(["АКТИВАЦИЯ ПО РЕГИОНИ:", None, "Да / Не"])
-    yn = lambda v: "Да" if v else ("Не" if v is False else "")  # noqa: E731
-    ws.append(["Активация — Варна", None, yn(form.get("region_varna"))])
-    ws.append(["Активация — София", None, yn(form.get("region_sofia"))])
-    for r in (4, 5):
-        for col in (5, 7):
-            ws.cell(r, col).number_format = "DD.MM.YYYY"
-    ws.append([])
-    if office:
-        ws.append([f"Цените в жълто са нашето искане: промо доставна цена за минимум {items[0]['min_margin']:.0f}% марж "
-                   "при одобрената промо цена на рафта." if items else ""])
-        ws.cell(ws.max_row, 1).font = red
-    if form.get("note"):
-        ws.append([f"Бележка: {form['note']}"])
-        ws.cell(ws.max_row, 1).font = red
-    head = ["№", "SAF-T", "Артикул", "Баркод", "Базова цена с ДДС (€)", "Т.О. %",
-            "Регулярна доставна цена с ДДС (€)", "Д.Т.О. %", "Промоционална доставна цена с ДДС (€)",
-            "Желан формат на карето", "Одобрен (промо цена рафт €)"]
-    ws.append(head)
-    hr = ws.max_row
-    for c in ws[hr]:
-        c.font, c.fill, c.border = bold, grey, box
-        c.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
-    ws.row_dimensions[hr].height = 45
-    for i, it in enumerate(items, 1):
-        n = lambda v: float(v) if v is not None else None  # noqa: E731
-        if office:
-            dto = it.get("need_dto")
-            promo = it.get("need_delivery")
-        else:
-            dto, promo = n(it.get("dto_pct")), n(it.get("promo"))
-        ws.append([i, it.get("saft"), it.get("m_name") or it["name"], it.get("barcode"), n(it.get("base")),
-                   (n(it.get("to_pct")) or 0) / 100 if it.get("to_pct") is not None else None,
-                   n(it.get("reg")), dto / 100 if dto is not None else None, promo,
-                   form.get("fmt") or form.get("wanted_format"), n(it.get("approved"))])
-        r = ws.max_row
-        for c in ws[r]:
-            c.border = box
-        ws.cell(r, 4).number_format = "@"
-        for col in (5, 7, 9):
-            ws.cell(r, col).number_format = "0.0000"
-        for col in (6, 8):
-            ws.cell(r, col).number_format = "0.00%"
-        ws.cell(r, 11).number_format = "0.00"
-        ws.cell(r, 11).font = red
-        if office:
-            for col in (8, 9):
-                ws.cell(r, col).fill = yellow
-    ws.append([])
-    ws.append([f"Решение: {ST.get(form['status'], form['status'])}"])
-    for col, w in zip("ABCDEFGHIJK", (5, 9, 42, 16, 12, 8, 14, 9, 14, 14, 14)):
+    C = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    L = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    R = Alignment(horizontal="right", vertical="center")
+    for col, w in zip("ABCDEFGHIJK", (5, 14, 38, 17, 12, 9, 13, 9, 13, 16, 18)):
         ws.column_dimensions[col].width = w
+
+    def put(ref, val=None, font=None, al=None, fl=None, merge=None, border=None):
+        c = ws[ref]
+        c.value = val
+        if font: c.font = font
+        if al: c.alignment = al
+        if fl: c.fill = fl
+        if border: c.border = border
+        if merge:
+            ws.merge_cells(f"{ref}:{merge}")
+        return c
+
+    def fmt_d(d):
+        return d.strftime("%d.%m.%Y") if d else ""
+
+    no = form.get("brochure_no") or "___"
+    put("A1", f"Приложение № {'6Г' if comp else '6Б'} към Договор за търговско сътрудничество",
+        F(size=8, color="FFFFFF"), L, DARK, "K1")
+    title = (f"Заявка Брошура №{no} за КОМПЕНСАЦИЯ ЗА ПРОДАДЕНА БРОЙКА от Доставчик:" if comp
+             else f"Заявка № {no} за участие в РЕКЛАМНА БРОШУРА от Доставчик:")
+    put("A3", title, F(size=15, bold=True), C, None, "H3")
+    put("I3", form.get("supplier") or "", F(size=13, bold=True), C, None, "K3")
+    ws.row_dimensions[3].height = 30
+    put("A4", ("Жълтите полета се попълват от ДОСТАВЧИКА, сините от КУПУВАЧА при потвърждение и при отчитане, а белите "
+               "се изчисляват автоматично: регулярна доставна цена = базова с ДДС - Т.О.%") if comp else
+        ("Жълтите полета се попълват от ДОСТАВЧИКА, сините от КУПУВАЧА при потвърждение, а белите се изчисляват "
+         "автоматично: регулярна доставна цена = базова с ДДС - Т.О.%; промоционална доставна цена = регулярна - Д.Т.О.%"),
+        F(size=8, italic=True), C, None, "K4")
+    ws.row_dimensions[4].height = 24
+
+    def period(r, label, a, b, note=None):
+        put(f"A{r}", label, F(size=10, bold=True), L, None, f"C{r}")
+        put(f"D{r}", "от", F(size=10), C, None, None, box)
+        put(f"E{r}", fmt_d(a), F(size=10), C, YEL, None, box)
+        put(f"F{r}", "до", F(size=10), C, None, None, box)
+        put(f"G{r}", fmt_d(b), F(size=10), C, YEL, None, box)
+        if note:
+            put(f"H{r}", note, F(size=8, italic=True, color="595959"), L, None, f"J{r}")
+
+    period(6, "Брошура — период на промоцията:", form.get("promo_from"), form.get("promo_to"),
+           "(стандартна продължителност 15 дни)")
+    period(7, "Период на засичане на компенсации:" if comp else "Период на промоционалните доставни цени:",
+           form.get("price_from"), form.get("price_to"))
+    yn = lambda v: "Да" if v else ("Не" if v is False else "")  # noqa: E731
+    put("A9", "АКТИВАЦИЯ ПО РЕГИОНИ:", F(size=10, bold=True), L, GREY, "B9", box)
+    put("C9", "Да / Не", F(size=10, bold=True), C, GREY, None, box)
+    put("A10", "Активация — Варна", F(size=9), L, None, "B10", box)
+    put("C10", yn(form.get("region_varna")), F(size=10), C, YEL, None, box)
+    put("A11", "Активация — София", F(size=9), L, None, "B11", box)
+    put("C11", yn(form.get("region_sofia")), F(size=10), C, YEL, None, box)
+    put("E9", "Краен срок за подаване на заявката:", F(size=10, bold=True), R, None, "H9", box)
+    put("I9", fmt_d(form.get("deadline")), F(size=10, bold=True), C, None, None, box)
+    put("F10", "Снимков материал с високо качество се изпраща заедно със заявката",
+        F(size=8, italic=True, color="595959"), C, None, "I10")
+    if comp:
+        put("A13", "ДОСТАВЧИКЪТ заявява компенсация в определен размер за всяка продадена бройка от посочените артикули "
+                   "за посочения период. КУПУВАЧЪТ потвърждава заявката ПРЕДИ началото на периода.",
+            F(size=8, italic=True), C, None, "K13")
+    else:
+        put("A13", "ПРАВИЛО ЗА ПЕРИОДИТЕ. Промоционалните доставни цени се залагат най-малко ЕДНА СЕДМИЦА "
+                   "(7 календарни дни) ПРЕДИ началото на брошурата и остават в сила ПРЕЗ ЦЕЛИЯ период на брошурата.",
+            F(size=8, italic=True), C, None, "K13")
+        put("A14", "Цената за участие е съгласно Приложение № 4 – Маркетингов ценоразпис.",
+            F(size=8, italic=True), C, None, "K14")
+    ws.row_dimensions[13].height = 22
+
+    hr = 17
+    put(f"A{hr-1}", "Попълва се от ДОСТАВЧИКА", F(size=10, bold=True, color="FFFFFF"), C, DARK, f"J{hr-1}")
+    put(f"K{hr-1}", "Попълва се от КУПУВАЧА", F(size=10, bold=True, color="FFFFFF"), C, DARK)
+    head = (["№", "SAF-T", "Артикул", "Баркод", "Базова цена с ДДС (€)", "Т.О. %",
+             "Регулярна доставна цена с ДДС (€)", "Компенсация за 1 брой с ДДС (€)", "Предложен период от",
+             "Предложен период до", "Одобрен"] if comp else
+            ["№", "SAF-T", "Артикул", "Баркод", "Базова цена с ДДС (€)", "Т.О. %",
+             "Регулярна доставна цена с ДДС (€)", "Д.Т.О. %", "Промоционална доставна цена с ДДС (€)",
+             "Желан формат на карето", "Одобрен"])
+    for j, h in enumerate(head, 1):
+        c = ws.cell(hr, j, h)
+        c.font, c.alignment, c.fill, c.border = F(size=9, bold=True), C, GREY, box
+    ws.row_dimensions[hr].height = 42
+
+    n = lambda v: float(v) if v is not None else None  # noqa: E731
+    asked = False
+    rows = max(14, len(items))
+    for i in range(rows):
+        r = hr + 1 + i
+        it = items[i] if i < len(items) else None
+        vals = [i + 1] + [None] * 10
+        if it:
+            app_, shelf = n(it.get("approved")), n(it.get("shelf"))
+            off = round((1 - app_ / shelf) * 100) if app_ and shelf else None
+            appr = (f"{app_:.2f} €".replace(".", ",") + (f"  (-{off}%)" if off else "")) if app_ else None
+            dto, promo = n(it.get("dto_pct")), n(it.get("promo"))
+            req = office and dto is None and it.get("need_delivery") is not None
+            if req:
+                dto, promo, asked = it.get("need_dto"), it.get("need_delivery"), True
+            vals = [i + 1, it.get("saft"), it.get("m_name") or it["name"], it.get("barcode"), n(it.get("base")),
+                    n(it.get("to_pct")) / 100 if it.get("to_pct") is not None else None, n(it.get("reg"))]
+            if comp:
+                vals += [n(it.get("comp")), fmt_d(form.get("price_from")), fmt_d(form.get("price_to")), appr]
+            else:
+                vals += [dto / 100 if dto is not None else None, promo,
+                         form.get("fmt") or form.get("wanted_format"), appr]
+        for j, v in enumerate(vals, 1):
+            c = ws.cell(r, j, v)
+            c.border, c.font = box, F(size=9)
+            c.alignment = L if j == 3 else C
+            if j in (2, 4, 5, 6, 10) or (j == 8 and not comp):
+                c.fill = YEL
+            if j == 11:
+                c.fill, c.font = BLUE, F(size=10, bold=True, color="C0193F")
+        ws.cell(r, 4).number_format = "@"
+        for j in (5, 7, 9) if not comp else (5, 7, 8):
+            ws.cell(r, j).number_format = "0.0000"
+        for j in (6, 8) if not comp else (6,):
+            ws.cell(r, j).number_format = "0.00%"
+        if it and not comp and office and it.get("dto_pct") is None and it.get("need_delivery") is not None:
+            for j in (8, 9):
+                ws.cell(r, j).font = F(size=9, bold=True, italic=True, color="C0193F")
+        ws.row_dimensions[r].height = 18
+    end = hr + rows
+    for j in range(1, 12):
+        c = ws.cell(end, j)
+        c.border = Border(left=c.border.left, right=c.border.right, top=c.border.top, bottom=med)
+
+    r = end + 1
+    if asked:
+        put(f"A{r}", f"В червено: искана от КУПУВАЧА промоционална доставна цена и Д.Т.О.% (минимален марж "
+                     f"{float(items[0].get('min_margin') or 20):.0f}% при одобрената цена на рафта).",
+            F(size=8, bold=True, italic=True, color="C0193F"), L, None, f"K{r}")
+    if form.get("note"):
+        r += 1
+        put(f"A{r}", f"Бележка от КУПУВАЧА: {form['note']}", F(size=9, bold=True, color="C0193F"), L, None, f"K{r}")
+    r += 1
+    put(f"A{r}", "ДОСТАВЧИКЪТ ще получи потвърждение по e-mail за одобрените артикули и формата.",
+        F(size=8, italic=True), C, None, f"K{r}")
+    r += 2
+    put(f"A{r}", "ДОСТАВЧИКА избира метода на документирането:", F(size=10, bold=True), C, None, f"K{r}")
+    for t in ("ДОСТАВЧИКЪТ издава кредитно известие", "КУПУВАЧЪТ издава фактура"):
+        r += 1
+        put(f"A{r}", "☐", F(size=11), C, None, None, box)
+        put(f"B{r}", t, F(size=9), L, None, f"F{r}", box)
+    r += 2
+    put(f"A{r}", "ДОСТАВЧИКА избира начин на уреждане:", F(size=10, bold=True), C, None, f"K{r}")
+    for t in ("прихващане от задълженията на КУПУВАЧА към ДОСТАВЧИКА",
+              "директен банков превод в срок до 30 календарни дни"):
+        r += 1
+        put(f"A{r}", "☐", F(size=11), C, None, None, box)
+        put(f"B{r}", t, F(size=9), L, None, f"F{r}", box)
+    r += 2
+    put(f"A{r}", "ДАТА:", F(size=10, bold=True), L, None, f"B{r}", box)
+    put(f"C{r}", date.today().strftime("%d.%m.%Y"), F(size=10), L, None, None, box)
+    r += 1
+    put(f"A{r}", "Настоящата заявка е неразделна част от Договора за търговско сътрудничество между страните и се "
+                 "подчинява на раздел V, т. 2 и раздел VI от него. Попълнените и подписани от двете страни раздели "
+                 "съставляват предварително договорените ясни и недвусмислени условия по смисъла на чл. 37е, ал. 1 от ЗЗК.",
+        F(size=7, italic=True, color="595959"), L, None, f"K{r}")
+    ws.row_dimensions[r].height = 26
+    r += 2
+    put(f"A{r}", "ЗА ДОСТАВЧИКА:", F(size=10, bold=True), Alignment(horizontal="left", vertical="center"), None, f"B{r}")
+    put(f"C{r}", "", F(size=10), L)
+    ws[f"C{r}"].border = Border(bottom=thin)
+    put(f"E{r}", "ДАТА:", F(size=10, bold=True), R)
+    put(f"F{r}", "", None, None, None, f"G{r}", box)
+    put(f"H{r}", "ЗА КУПУВАЧА:", F(size=10, bold=True), R, None, f"I{r}")
+    put(f"J{r}", os.getenv("BUYER_NAME", "Габриела Петрова"), F(size=10, bold=True), L, None, f"K{r}")
+    r += 1
+    put(f"C{r}", "(подпис и име)", F(size=7, italic=True, color="7F7F7F"), C)
+    put(f"J{r}", "(подпис и име)", F(size=7, italic=True, color="7F7F7F"), C, None, f"K{r}")
+    put(f"A{r+2}", f"Решение: {ST.get(form['status'], form['status'])}", F(size=8, color="7F7F7F"), L, None, f"E{r+2}")
+
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4)
+    ws.print_area = f"A1:K{r+2}"
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

@@ -34,12 +34,15 @@ def info(codes: list[int]) -> tuple[dict[int, dict], list[str]]:
             last = c.execute(text("SELECT MAX(day) FROM sa_sales")).scalar()
             if not last:
                 return {}, ["MinMaxAI още няма продажби."]
-            for code, q, rev, cost, st in c.execute(text("""
-                    SELECT code, SUM(qty), SUM(rev), SUM(cost), COUNT(DISTINCT store_id) FILTER (WHERE qty > 0)
+            for code, q, qs, rev, cost, st in c.execute(text(f"""
+                    SELECT code, SUM(qty), SUM(qty) FILTER (WHERE store_id IN {SOF}),
+                           SUM(rev), SUM(cost), COUNT(DISTINCT store_id) FILTER (WHERE qty > 0)
                     FROM sa_sales WHERE day > :d AND code = ANY(:c) GROUP BY code"""),
                     {"d": last - timedelta(days=30), "c": codes}):
                 o = out[code]
                 o["mm_sales30"] = int(round(float(q or 0)))
+                o["mm_sofia"] = int(round(float(qs or 0)))
+                o["mm_varna"] = o["mm_sales30"] - o["mm_sofia"]
                 o["mm_stores"] = int(st or 0)
                 if rev and float(rev) > 0:
                     o["margin30"] = round(100 * (float(rev) - float(cost or 0)) / float(rev), 1)
@@ -93,14 +96,17 @@ def articles(supplier: str) -> list[dict]:
         last = c.execute(text("SELECT MAX(day) FROM sa_sales")).scalar()
         rows = [dict(r._mapping) for r in c.execute(text("""
             SELECT a.code, a.name, a.grp,
-                   COALESCE(SUM(s.qty), 0) AS sales30, SUM(s.rev) AS rev, SUM(s.cost) AS cost
+                   COALESCE(SUM(s.qty), 0) AS sales30, SUM(s.rev) AS rev, SUM(s.cost) AS cost,
+                   COALESCE(SUM(s.qty) FILTER (WHERE s.store_id IN (SELECT id FROM stores WHERE mistral_db_path = 'sofia')), 0) AS sofia
             FROM sa_articles a LEFT JOIN sa_sales s ON s.code = a.code AND s.day > :d
             WHERE a.supplier = :s GROUP BY a.code, a.name, a.grp
             ORDER BY COALESCE(SUM(s.qty), 0) DESC"""), {"s": supplier, "d": last - timedelta(days=30)})]
     out = []
     for r in rows:
         rev = float(r["rev"] or 0)
-        out.append({"code": r["code"], "name": r["name"], "grp": r["grp"], "sales30": int(round(float(r["sales30"]))),
+        tot, sof = int(round(float(r["sales30"]))), int(round(float(r["sofia"])))
+        out.append({"code": r["code"], "name": r["name"], "grp": r["grp"], "sales30": tot,
+                    "varna": tot - sof, "sofia": sof,
                     "margin30": round(100 * (rev - float(r["cost"] or 0)) / rev, 1) if rev > 0 else None})
     extra, _ = info([r["code"] for r in out[:150]])
     for r in out:

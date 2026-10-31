@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS supplier_prices (
   supplier TEXT NOT NULL, code INT NOT NULL, reg NUMERIC(12,4) NOT NULL,
   source TEXT, updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (supplier, code));
+ALTER TABLE supplier_prices ADD COLUMN IF NOT EXISTS base NUMERIC(12,4);
+ALTER TABLE supplier_prices ADD COLUMN IF NOT EXISTS to_pct NUMERIC(6,2);
 CREATE INDEX IF NOT EXISTS items_form ON items(form_id, pos);
 CREATE TABLE IF NOT EXISTS mail_seen (msg_id TEXT PRIMARY KEY, seen_at TIMESTAMPTZ NOT NULL DEFAULT now());
 """

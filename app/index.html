@@ -64,6 +64,7 @@ h1 span{color:var(--pen)}
 .fld input{width:84px;font:inherit;font-family:var(--f-m);font-size:.95rem;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
 .fld input.pen{color:var(--pen);border-color:var(--pen);background:var(--pen-soft);font-weight:600}
 .fld input:disabled{opacity:.7}
+.grp{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--pen);font-weight:700;margin-top:2px}
 .mg{margin-left:auto;text-align:right;min-width:80px}
 .mg .v{font-family:var(--f-m);font-weight:600}
 .mg .k{font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
@@ -87,12 +88,14 @@ textarea{width:100%;min-height:44px}
 .hero .hi{font-family:var(--f-s);font-size:1.6rem;color:#f3a66f;line-height:1}
 .hero .ph{font-size:1.02rem;line-height:1.4;text-wrap:balance;opacity:0;animation:rise .9s .35s ease forwards}
 .hero .dt{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#bfb2a0}
-.logo{flex:none;display:block}
+.logo{flex:none;display:block;position:relative}
+.logo svg{position:absolute;inset:-18%;width:136%;height:136%;overflow:visible}
+.logo img{position:relative;width:100%;height:100%;object-fit:contain;transform-origin:50% 60%}
+.logo .pop{animation:pop .8s cubic-bezier(.2,1.4,.4,1) both}
 .logo .spk{stroke:#e8772e;stroke-width:3;stroke-linecap:round;stroke-dasharray:14;stroke-dashoffset:14;animation:spark 2.8s ease-out infinite}
 .logo .spk:nth-child(2n){animation-delay:.25s}.logo .spk:nth-child(3n){animation-delay:.5s}
 .logo .num{font-family:var(--f-d);font-weight:800}
 .logo .scr{font-family:var(--f-s);font-weight:700}
-.logo .pop{transform-origin:60px 66px;animation:pop .8s cubic-bezier(.2,1.4,.4,1) both}
 .burst{position:absolute;inset:0;pointer-events:none;opacity:.18;background:radial-gradient(circle at 92% 10%,#e8772e 0 2px,transparent 3px),radial-gradient(circle at 80% 85%,#e8772e 0 2px,transparent 3px),radial-gradient(circle at 60% 20%,#f3a66f 0 1.5px,transparent 2.5px)}
 .login .hero{flex-direction:column;text-align:center;padding:26px 18px}
 .login .btn{justify-content:center}
@@ -130,13 +133,11 @@ const post=(p,b)=>api(p,{method:"POST",body:JSON.stringify(b)});
 let TODAY=null;
 async function today(){if(!TODAY){try{TODAY=await (await fetch("/api/today")).json()}catch(e){TODAY={phrase:""}}}return TODAY}
 function logo(sz=96){
-  if(TODAY&&TODAY.logo)return `<img class="logo" src="${esc(TODAY.logo)}" alt="Магазини 300" style="height:${sz}px">`;
-  const sp=[[60,6,60,-6],[96,18,104,10],[112,52,124,50],[24,18,16,10],[8,52,-4,50],[100,94,108,102],[20,94,12,102]];
-  return `<svg class="logo" width="${sz*1.1}" height="${sz}" viewBox="-8 -10 136 120" aria-label="Магазини 300" role="img">
-    <g>${sp.map(([a,b,c,d])=>`<line class="spk" x1="${a}" y1="${b}" x2="${c}" y2="${d}"/>`).join("")}</g>
-    <g class="pop"><text class="scr" x="60" y="40" text-anchor="middle" font-size="26" fill="#f3a66f">Family</text>
-    <text class="num" x="60" y="86" text-anchor="middle" font-size="50" fill="#f6efe3" letter-spacing="-2">300</text>
-    <rect x="22" y="94" width="76" height="4" rx="2" fill="#e8772e"/></g></svg>`;
+  const src=TODAY&&TODAY.logo?TODAY.logo:"/logo.png";
+  const sp=[[50,-8,50,-20],[86,4,96,-6],[104,40,118,38],[14,4,4,-6],[-4,40,-18,38],[92,92,102,102],[8,92,-2,102]];
+  return `<span class="logo" style="width:${sz*1.3}px;height:${sz}px">
+    <svg viewBox="-24 -24 148 148" preserveAspectRatio="none" aria-hidden="true">${sp.map(([a,b,c,d])=>`<line class="spk" x1="${a}" y1="${b}" x2="${c}" y2="${d}"/>`).join("")}</svg>
+    <img class="pop" src="${esc(src)}" alt="Магазини 300"></span>`;
 }
 function hello(){const h=new Date().getHours();return h<11?"Добро утро":h<18?"Добър ден":"Добър вечер"}
 const NAMES={asen:"Асен",dimo:"Димо",ofis:"екип"};
@@ -197,24 +198,33 @@ async function upload(files){
 const mcls=m=>m==null?"":m>=22?"m-good":m>=15?"m-mid":"m-low";
 function itemHTML(it,kind){
   const dis=canDecide()?"":"disabled";
-  const sup=kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:(it.dto_pct?`<span class="g-ok">Д.Т.О. ${f(it.dto_pct,1)}%</span>`:`<span class="g-bad">без отстъпка</span>`);
+  const nv=v=>v==null?"":String(Number(v)).replace(".",",");
   const need=it.need_delivery!=null?`<span>За ${f(it.min_margin,0)}% марж искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
   const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
+  const reg=(lbl,v)=>v==null?"":`<span>${lbl} <b>${v}</b> бр.</span>`;
   return `<div class="item" data-id="${it.id}">
     <div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
-    <div class="prices">${it.reg_src?`<span>Редовна от: <b>${esc(it.reg_src)}</b></span>`:""}<span>Промо дост. <b>${f(it.cost,4)}</b></span>${sup}
-      ${it.reg_margin!=null?`<span>Марж сега <b>${f(it.reg_margin,1)}%</b></span>`:""}${it.margin30!=null?`<span>Марж каса 30 д. <b>${f(it.margin30,1)}%</b></span>`:""}${fund}</div>
-    ${it.stock!=null||it.last_promo?`<div class="prices">${it.stock!=null?`<span>Наличност <b>${it.stock}</b> бр.${it.stores?` · продава се в ${it.stores} м-на`:""}</span>`:""}
-      ${it.last_promo?`<span>Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · продажби <b class="${it.uplift>=1.5?"g-ok":""}">×${f(it.uplift,1)}</b>`:""}</span>`:`<span>Не е бил в брошура</span>`}</div>`:""}
+    <div class="prices">${reg("Продажби 30 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span>Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
+      ${it.margin30!=null?`<span>Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
+      ${it.last_promo?`<span>Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
+    <div class="grp">Доставчик${it.reg_src?` · редовна от: ${esc(it.reg_src)}`:""}</div>
     <div class="entry">
-      <div class="fld"><label>Продажби 30 д.</label><input data-k="sales30" inputmode="numeric" value="${it.sales30??""}" title="Варна ${it.sales30_varna??"—"} · София ${it.sales30_sofia??"—"}"></div>
+      ${kind==="comp"?`<div class="fld"><label>Компенсация/бр.</label><input data-k="comp" value="${nv(it.comp)}" disabled></div>`:""}
+      <div class="fld"><label>Базова с ДДС</label><input data-k="base" inputmode="decimal" value="${nv(it.base)}"></div>
+      <div class="fld"><label>Т.О. %</label><input data-k="to_pct" inputmode="decimal" value="${nv(it.to_pct)}"></div>
+      <div class="fld"><label>Редовна дост.</label><input data-k="reg" inputmode="decimal" value="${nv(it.reg)}"></div>
+      <div class="fld"><label>Д.Т.О. %</label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}"></div>
+      <div class="fld"><label>Промо дост.</label><input data-k="promo" inputmode="decimal" value="${nv(it.promo)}"></div>
       ${it.code?"":`<div class="fld"><label>Наш код</label><input data-k="code" inputmode="numeric" value=""></div>`}
-      <div class="fld"><label>Редовна дост.</label><input data-k="reg" inputmode="decimal" value="${it.reg==null?"":String(Number(it.reg)).replace(".",",")}" title="Поправи - системата я запомня за този доставчик"></div>
+    </div>
+    <div class="prices">${fund}</div>
+    <div class="grp">Купувач</div>
+    <div class="entry">
       <div class="fld"><label>Рафт сега</label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
       <div class="fld"><label>Промо рафт</label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
       <div class="fld"><label>Отстъпка %</label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
-      <div class="mg"><div class="k">Марж</div><div class="v ${mcls(it.margin)}">${it.margin==null?"—":f(it.margin,1)+"%"}</div></div>
+      <div class="mg"><div class="k">Марж ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div><div class="v ${mcls(it.margin)}">${it.margin==null?"—":f(it.margin,1)+"%"}</div></div>
     </div></div>`;
 }
 async function renderForm(id){
@@ -330,7 +340,7 @@ function drawArts(){
    ${list.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
       <input type="checkbox" data-c="${a.code}" ${PICK.has(a.code)?"checked":""} style="width:20px;height:20px">
       <div style="flex:1;min-width:0"><div class="it-n">${esc(a.name)}</div>
-      <div class="prices"><span><b>${a.sales30}</b> бр./30 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
+      <div class="prices"><span>Варна <b>${a.varna??a.sales30}</b></span><span>София <b>${a.sofia??0}</b> бр./30 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
       ${a.last_promo?`<span>брошура ${esc(a.last_promo)}${a.uplift?` ×${f(a.uplift,1)}`:""}</span>`:""}<span class="code">${a.code}</span></div></div></label>`).join("")}</div>`;
   const upd=()=>{$("#cnt").textContent=PICK.size?`избрани ${PICK.size}`:"";$("#mk").disabled=!PICK.size};
   box.querySelectorAll("[data-c]").forEach(cb=>cb.onchange=()=>{const c=+cb.dataset.c;cb.checked?PICK.add(c):PICK.delete(c);upd()});

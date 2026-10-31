@@ -95,19 +95,26 @@ def supkey(name: str | None) -> str:
     return " ".join((name or "").upper().replace("„", "").replace("“", "").replace('"', "").split())
 
 
-def remember_reg(supplier: str | None, code: int | None, reg, source: str, user: str = ""):
-    """Запомня редовната доставна цена на доставчика за артикула - ползва се в следващата му брошура."""
+def remember_reg(supplier: str | None, code: int | None, reg, source: str, user: str = "",
+                 base=None, to_pct=None):
+    """Запомня базовата цена, Т.О. и редовната доставна цена на доставчика за артикула -
+    ползват се в следващата му брошура."""
     if not code or reg is None or not supkey(supplier):
         return
-    db.q("""INSERT INTO supplier_prices (supplier, code, reg, source, updated_by) VALUES (:s, :c, :r, :src, :u)
-            ON CONFLICT (supplier, code) DO UPDATE SET reg=EXCLUDED.reg, source=EXCLUDED.source,
-            updated_by=EXCLUDED.updated_by, updated_at=now()""",
-         s=supkey(supplier), c=int(code), r=reg, src=source, u=user)
+    db.q("""INSERT INTO supplier_prices (supplier, code, reg, base, to_pct, source, updated_by)
+            VALUES (:s, :c, :r, :b, :t, :src, :u)
+            ON CONFLICT (supplier, code) DO UPDATE SET reg=EXCLUDED.reg,
+            base=COALESCE(EXCLUDED.base, supplier_prices.base), to_pct=COALESCE(EXCLUDED.to_pct, supplier_prices.to_pct),
+            source=EXCLUDED.source, updated_by=EXCLUDED.updated_by, updated_at=now()""",
+         s=supkey(supplier), c=int(code), r=reg, b=base, t=to_pct, src=source, u=user)
 
 
 def enrich_form(form_id: int) -> list[str]:
     items = db.rows("SELECT id, barcode, code FROM items WHERE form_id=:f ORDER BY pos", f=form_id)
-    fm = db.one("SELECT supplier, source FROM forms WHERE id=:id", id=form_id) or {}
+    fm = db.one("SELECT supplier, source, region_varna, region_sofia FROM forms WHERE id=:id", id=form_id) or {}
+    rv, rs = fm.get("region_varna"), fm.get("region_sofia")
+    if rv is None and rs is None:
+        rv = rs = True
     office, sup_key = fm.get("source") == "office", supkey(fm.get("supplier"))
     res, notes = mistral.enrich(items)
     from . import minmax
@@ -116,7 +123,10 @@ def enrich_form(form_id: int) -> list[str]:
     for r in res:
         x = mm.get(r.get("code") or -1, {})
         if x.get("mm_sales30") is not None:
-            r["sales30"] = x["mm_sales30"]
+            r["sales30_varna"], r["sales30_sofia"] = x["mm_varna"], x["mm_sofia"]
+        # продажбите, по които се смята „доплащаме“ - само за регионите в брошурата
+        if r.get("sales30_varna") is not None or r.get("sales30_sofia") is not None:
+            r["sales30"] = (r.get("sales30_varna") or 0) * bool(rv) + (r.get("sales30_sofia") or 0) * bool(rs)
         db.q("""UPDATE items SET margin30=:a, stock=:b, stores=:c, last_promo=:d, uplift=:e WHERE id=:id""",
              id=r["id"], a=x.get("margin30"), b=x.get("stock"), c=x.get("mm_stores"),
              d=x.get("last_promo"), e=x.get("uplift"))
@@ -125,9 +135,11 @@ def enrich_form(form_id: int) -> list[str]:
         if office and r.get("code"):
             row = db.one("SELECT reg FROM items WHERE id=:id", id=r["id"])
             if row and row["reg"] is None:
-                mem = db.one("SELECT reg FROM supplier_prices WHERE supplier=:s AND code=:c", s=sup_key, c=r["code"])
+                mem = db.one("SELECT reg, base, to_pct FROM supplier_prices WHERE supplier=:s AND code=:c",
+                             s=sup_key, c=r["code"])
                 if mem:
-                    db.q("UPDATE items SET reg=:v, reg_src='запомнена' WHERE id=:id", v=mem["reg"], id=r["id"])
+                    db.q("""UPDATE items SET reg=:v, base=COALESCE(base, :b), to_pct=COALESCE(to_pct, :t),
+                            reg_src='запомнена' WHERE id=:id""", v=mem["reg"], b=mem["base"], t=mem["to_pct"], id=r["id"])
                 elif r.get("last_delivery"):
                     db.q("UPDATE items SET reg=:v, reg_src='Мистрал' WHERE id=:id", v=r["last_delivery"], id=r["id"])
         db.q("""UPDATE items SET code=:code, m_name=COALESCE(:m_name, m_name), shelf=COALESCE(:shelf, shelf),
@@ -157,8 +169,9 @@ def ingest(data: bytes, name: str, ctype: str, source: str = "upload", source_fr
                  VALUES (:f, :pos, {', '.join(':' + c for c in ITEM_COLS)})""", f=fid, pos=i, **it)
     notes = enrich_form(fid)
     db.q("UPDATE items SET reg_src='доставчик' WHERE form_id=:f AND reg IS NOT NULL", f=fid)
-    for it in db.rows("SELECT code, reg FROM items WHERE form_id=:f AND code IS NOT NULL AND reg IS NOT NULL", f=fid):
-        remember_reg(p["supplier"], it["code"], it["reg"], "бланка от доставчика", user)
+    for it in db.rows("SELECT code, reg, base, to_pct FROM items WHERE form_id=:f AND code IS NOT NULL AND reg IS NOT NULL",
+                      f=fid):
+        remember_reg(p["supplier"], it["code"], it["reg"], "бланка от доставчика", user, it["base"], it["to_pct"])
     if notes:
         w = "\n".join(filter(None, ["\n".join(p["warnings"]), *notes]))
         db.q("UPDATE forms SET warnings=:w WHERE id=:id", w=w, id=fid)
@@ -326,6 +339,10 @@ class ItemPatch(BaseModel):
     sales30: int | None = None
     item_note: str | None = None
     reg: float | None = None
+    base: float | None = None
+    to_pct: float | None = None
+    dto_pct: float | None = None
+    promo: float | None = None
     clear_approved: bool = False
 
 
@@ -342,10 +359,22 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
         v = getattr(p, k)
         if v is not None:
             db.q(f"UPDATE items SET {k}=:v WHERE id=:id", v=v, id=iid)
-    if p.reg is not None:
-        db.q("UPDATE items SET reg=:v, reg_src='офис' WHERE id=:id", v=p.reg, id=iid)
+    # цени от доставчика, въведени от офиса: базова -> (Т.О.) -> редовна -> (Д.Т.О.) -> промо доставна
+    prices = {k: getattr(p, k) for k in ("base", "to_pct", "reg", "dto_pct", "promo") if getattr(p, k) is not None}
+    if prices:
+        cur = db.one("SELECT base, to_pct, reg, dto_pct, promo FROM items WHERE id=:id", id=iid)
+        v = {k: (float(x) if x is not None else None) for k, x in cur.items()}
+        v.update(prices)
+        if ("base" in prices or "to_pct" in prices) and v["base"] is not None and "reg" not in prices:
+            v["reg"] = round(v["base"] * (1 - (v["to_pct"] or 0) / 100), 4)
+        if "promo" in prices and v["reg"]:
+            v["dto_pct"] = round((1 - v["promo"] / v["reg"]) * 100, 2)
+        elif v["dto_pct"] is not None and v["reg"] is not None:
+            v["promo"] = round(v["reg"] * (1 - v["dto_pct"] / 100), 4)
+        db.q("""UPDATE items SET base=:base, to_pct=:to_pct, reg=:reg, dto_pct=:dto_pct, promo=:promo,
+                reg_src='офис' WHERE id=:id""", id=iid, **v)
         row = db.one("""SELECT f.supplier, i.code FROM items i JOIN forms f ON f.id=i.form_id WHERE i.id=:id""", id=iid)
-        remember_reg(row["supplier"], row["code"], p.reg, "поправена", user["user"])
+        remember_reg(row["supplier"], row["code"], v["reg"], "поправена", user["user"], v["base"], v["to_pct"])
     if p.code is not None:
         enrich_form(it["form_id"])
     return get_form(it["form_id"], user)
@@ -440,6 +469,13 @@ async def mail_now(user: dict = Depends(need("office"))):
 
 
 INDEX = Path(__file__).with_name("index.html")
+LOGO = Path(__file__).with_name("static") / "logo.png"
+
+
+@app.get("/logo.png")
+def logo():
+    from fastapi.responses import FileResponse
+    return FileResponse(LOGO, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/", response_class=HTMLResponse)
