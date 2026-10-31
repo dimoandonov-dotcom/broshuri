@@ -276,6 +276,8 @@ def _item_calc(it: dict, kind: str) -> dict:
     cost = (reg - comp) if (kind == "comp" and reg is not None and comp is not None) else promo
     app_, shelf = _num(it["approved"]), _num(it["shelf"])
     sup_gives = comp if kind == "comp" else ((reg - promo) if reg is not None and promo is not None else None)
+    if sup_gives is None and kind != "comp" and reg is not None:
+        sup_gives = 0.0   # доставчикът още не е дал отстъпка - цялото намаление е наше
     it["cost"] = cost
     it["margin"] = round((app_ - cost) / app_ * 100, 1) if app_ and cost is not None else None
     # ако доставчикът още не е дал промо цена - маржът при сегашната редовна доставна (най-лошият случай)
