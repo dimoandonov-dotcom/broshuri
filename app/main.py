@@ -299,7 +299,7 @@ def checks(it: dict, kind: str) -> list[str]:
         out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода.")
     if reg and md:
         net = md / (1 + vat / 100)
-        if abs(reg - net) / net < 0.03 and vat:
+        if abs(reg - net) / net < 0.06 and vat:
             out.append(f"Редовната цена {reg:.4f} изглежда БЕЗ ДДС (последна доставка без ДДС {net:.4f}). "
                        f"С ДДС {vat:.0f}% е {reg * (1 + vat / 100):.4f}.")
         elif abs(reg - md) / md > 0.10:
