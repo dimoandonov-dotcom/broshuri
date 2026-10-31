@@ -16,11 +16,30 @@ ST = {"pending": "Чака решение", "approved": "Одобрена", "cou
 
 
 # ---------- Telegram ----------
+def _chat_ids() -> list[str]:
+    """TELEGRAM_CHAT_IDS изрично, или по потребител (TELEGRAM_USERS) от свързаните в бота на MinMaxAI."""
+    ids = [c.strip() for c in os.getenv("TELEGRAM_CHAT_IDS", "").split(",") if c.strip()]
+    url, names = os.getenv("MINMAX_DATABASE_URL", ""), os.getenv("TELEGRAM_USERS", "asen")
+    if not ids and url:
+        try:
+            from sqlalchemy import create_engine, text
+            url = url.replace("postgres://", "postgresql+psycopg2://", 1).replace("postgresql://", "postgresql+psycopg2://", 1)
+            eng = create_engine(url, pool_pre_ping=True)
+            with eng.connect() as c:
+                want = [n.strip().lower() for n in names.split(",") if n.strip()]
+                ids = [str(r[0]) for r in c.execute(text("SELECT chat_id FROM tg_users WHERE lower(username) = ANY(:u)"),
+                                                    {"u": want})]
+            eng.dispose()
+        except Exception as e:  # noqa: BLE001
+            print("telegram ids:", e, flush=True)
+    return ids
+
+
 def telegram(text_: str) -> None:
-    tok, chats = os.getenv("TELEGRAM_TOKEN", "").strip(), os.getenv("TELEGRAM_CHAT_IDS", "").strip()
-    if not tok or not chats:
+    tok = os.getenv("TELEGRAM_TOKEN", "").strip()
+    if not tok:
         return
-    for chat in [c.strip() for c in chats.split(",") if c.strip()]:
+    for chat in _chat_ids():
         try:
             req = urllib.request.Request(
                 f"https://api.telegram.org/bot{tok}/sendMessage",
