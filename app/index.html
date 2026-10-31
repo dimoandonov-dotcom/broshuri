@@ -445,6 +445,7 @@ function renderHelp(){
 
 async function route(){
   if(!ME){try{ME=await api("/api/me")}catch(e){return}}
+  {const sh=$("#sheet");if(sh)sh.hidden=true;}
   if(location.hash==="#help"){renderHelp();return}
   if(location.hash==="#new"){try{await renderNew()}catch(e){toast(e.message)}return}
   const m=location.hash.match(/^#f(\d+)/);
