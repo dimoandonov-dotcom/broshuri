@@ -51,7 +51,7 @@ def info(codes: list[int]) -> tuple[dict[int, dict], list[str]]:
             for code, s, e, disc, price in c.execute(text("""
                     SELECT DISTINCT ON (code) code, start_day, end_day, discount, price FROM sa_promo
                     WHERE code = ANY(:c) AND COALESCE(tp, 1) = 1 AND start_day <= :l
-                    ORDER BY code, start_day DESC"""), {"c": codes, "l": last}):
+                    ORDER BY code, (end_day - start_day >= 3) DESC, start_day DESC"""), {"c": codes, "l": last}):
                 promos[code] = (s, e, disc, price)
             for code, (s, e, disc, price) in promos.items():
                 pe = min(e, last)
