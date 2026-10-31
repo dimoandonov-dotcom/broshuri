@@ -300,6 +300,13 @@ def health():
             "ai": bool(os.getenv("ANTHROPIC_API_KEY"))}
 
 
+@app.get("/api/admin/probe")
+async def probe(barcode: str, user: dict = Depends(need())):
+    """Проверка на Мистрал по един баркод (само за админ)."""
+    res, notes = await run_in_threadpool(mistral.enrich, [{"id": 0, "barcode": barcode, "code": None}])
+    return {"result": res, "notes": notes}
+
+
 @app.post("/api/mail/check")
 async def mail_now(user: dict = Depends(need("office"))):
     return {"new": await run_in_threadpool(extras.poll_mail, ingest)}
