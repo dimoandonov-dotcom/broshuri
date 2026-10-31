@@ -49,7 +49,7 @@ def _codes_by_barcode(cur, barcodes: list[str]) -> dict[str, int]:
     cols = _cols(cur, "BARCODE")
     bc_col = next((c for c in cols if c.upper() == "BARCODE"), None) \
         or next((c for c in cols if "BARCODE" in c.upper() or c.upper() in ("CODE", "EAN")), None)
-    code_col = next((c for c in cols if c.upper() == "MATERIALCODE"), None)
+    code_col = next((c for c in cols if c.upper() in ("MATERIALCODE", "STORAGEMATERIALCODE")), None)
     if not bc_col or not code_col:
         raise RuntimeError(f"Таблица BARCODE: не намирам колоните ({', '.join(cols)})")
     out: dict[str, int] = {}
