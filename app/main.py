@@ -463,6 +463,21 @@ async def probe(barcode: str, user: dict = Depends(need())):
     return {"result": res, "minmax": mm, "notes": notes + n2}
 
 
+@app.get("/api/admin/columns")
+async def columns(table: str, code: int | None = None, user: dict = Depends(need())):
+    """Колоните на таблица в Мистрал (+ един ред за артикул) - за проучване, само админ."""
+    def run():
+        with mistral.connect("varna") as conn:
+            cur = conn.cursor()
+            cols = mistral._cols(cur, table)
+            row = None
+            if code and "MATERIALCODE" in [c.upper() for c in cols]:
+                cur.execute(f"SELECT TOP 1 * FROM [{table}] WITH (NOLOCK) WHERE MATERIALCODE = %s", (code,))
+                row = {k: str(v) for k, v in (cur.fetchone() or {}).items()}
+            return {"columns": cols, "row": row}
+    return await run_in_threadpool(run)
+
+
 @app.post("/api/mail/check")
 async def mail_now(user: dict = Depends(need("office"))):
     return {"new": await run_in_threadpool(extras.poll_mail, ingest)}
