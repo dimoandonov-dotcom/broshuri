@@ -195,6 +195,7 @@ class NewForm(BaseModel):
     price_to: str | None = None
     region_varna: bool = True
     region_sofia: bool = True
+    notify: bool = True   # само админ може да го спре (за тестове)
 
 
 @app.post("/api/forms/new")
@@ -216,7 +217,8 @@ async def new_form(p: NewForm, user: dict = Depends(need("office"))):
     if notes:
         db.q("UPDATE forms SET warnings=:w WHERE id=:id", w="\n".join(notes), id=fid)
     url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
-    extras.telegram(f"Брошура за цени: {p.supplier} - {len(p.codes)} арт. Чака твоите цени.\n{url}")
+    if p.notify or user["role"] != "admin":
+        extras.telegram(f"Брошура за цени: {p.supplier} - {len(p.codes)} арт. Чака твоите цени.\n{url}")
     return {"id": fid}
 
 
