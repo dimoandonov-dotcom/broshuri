@@ -120,7 +120,8 @@ async function renderList(){
   app.innerHTML=`<div class="top"><h1>Брошури</h1><span class="sp"></span><span class="muted">${esc(ME.user)}</span><button class="btn" id="lo">Изход</button></div>
   ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
      <b>Качи бланки</b><br><span class="muted">Excel, PDF или снимка - може няколко наведнъж</span></label>
-     <div class="top"><span class="muted">Бланките по имейл се прибират сами на 5 мин.</span><span class="sp"></span><button class="btn" id="mc">Провери пощата</button></div>`:""}
+     <div class="top"><span class="muted">Бланките по имейл се прибират сами на 5 мин.</span><span class="sp"></span><button class="btn" id="mc">Провери пощата</button></div>
+     <a class="btn pri" href="#new" style="justify-content:center">+ Нова брошура по доставчик</a>`:""}
   <div class="chips">${[["pending","Чакат"],["counter","Контраоферта"],["approved","Одобрени"],["rejected","Отказани"],["all","Всички"]]
     .map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${FILTER===k}">${l} · ${cnt(k)}</button>`).join("")}</div>
   <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
@@ -152,7 +153,8 @@ const mcls=m=>m==null?"":m>=22?"m-good":m>=15?"m-mid":"m-low";
 function itemHTML(it,kind){
   const dis=canDecide()?"":"disabled";
   const sup=kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:(it.dto_pct?`<span class="g-ok">Д.Т.О. ${f(it.dto_pct,1)}%</span>`:`<span class="g-bad">без отстъпка</span>`);
-  const fund=it.funded==null?"":it.funded>0.005?`<span class="g-bad">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`;
+  const need=it.need_delivery!=null?`<span>За ${f(it.min_margin,0)}% марж искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
+  const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
   return `<div class="item" data-id="${it.id}">
     <div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
@@ -193,7 +195,8 @@ async function renderForm(id){
       :`<div><span class="badge ${ST[F.status][1]}">${ST[F.status][0]}</span> ${F.decided_by?`<span class="muted">от ${esc(F.decided_by)}</span>`:""}</div>`}
   </div>
   <div class="card dec"><div class="r">
-    <a class="btn pri" href="/api/forms/${F.id}/answer.xlsx">Отговор Excel</a>
+    <a class="btn pri" href="/api/forms/${F.id}/blank.xlsx">Бланка 6Б с цените</a>
+    <a class="btn" href="/api/forms/${F.id}/answer.xlsx">Отговор Excel</a>
     ${(F.file_name||"").toLowerCase().match(/\.xls[xm]$/)?`<a class="btn" href="/api/forms/${F.id}/filled.xlsx">Попълнена оригинална бланка</a>`:""}
     <a class="btn" href="/api/forms/${F.id}/original">Оригинал</a>
     <button class="btn" id="rf">Обнови от Мистрал</button>
@@ -218,8 +221,58 @@ async function saveItem(inp){
   else body[k]=k==="sales30"||k==="code"?Math.round(v):v;
   try{FORM=await post("/api/items/"+id,body);const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y)}catch(e){toast(e.message)}
 }
+let SUPS=null, ARTS=[], PICK=new Set();
+async function renderNew(){
+  if(!SUPS)SUPS=await api("/api/suppliers");
+  const today=new Date().toISOString().slice(0,10);
+  app.innerHTML=`<a class="back" href="#">‹ Всички бланки</a><h1>Нова брошура</h1>
+  <div class="card dec">
+    <div class="fld"><label for="sup">Доставчик</label><input class="inp" id="sup" list="supl" placeholder="Започни да пишеш…" style="width:100%" autocomplete="off"></div>
+    <datalist id="supl">${SUPS.map(x=>`<option value="${esc(x.supplier)}">${x.n} арт.</option>`).join("")}</datalist>
+    <div class="r"><div class="fld"><label for="pf">Промоция от</label><input class="inp" type="date" id="pf"></div>
+      <div class="fld"><label for="pt">до</label><input class="inp" type="date" id="pt"></div>
+      <div class="fld"><label for="bn">Брошура №</label><input class="inp" id="bn" style="width:90px"></div></div>
+    <div class="r"><div class="fld"><label for="rf">Доставни цени от</label><input class="inp" type="date" id="rf"></div>
+      <div class="fld"><label for="rt">до</label><input class="inp" type="date" id="rt"></div></div>
+    <div class="r"><label><input type="checkbox" id="rv" checked> Варна</label><label><input type="checkbox" id="rs" checked> София</label></div>
+  </div>
+  <div id="arts"></div>
+  <button class="btn pri" id="mk" disabled style="justify-content:center">Създай бланката</button>`;
+  const pf=$("#pf"),rf=$("#rf");
+  pf.onchange=()=>{if(pf.value&&!rf.value){const d=new Date(pf.value);d.setDate(d.getDate()-7);rf.value=d.toISOString().slice(0,10)}};
+  $("#pt").onchange=()=>{const t=$("#pt").value;if(t&&!$("#rt").value){const d=new Date(t);d.setDate(d.getDate()+7);$("#rt").value=d.toISOString().slice(0,10)}};
+  $("#sup").onchange=async()=>{
+    const n=$("#sup").value.trim();if(!SUPS.some(x=>x.supplier===n))return;
+    $("#arts").innerHTML=`<div class="card muted">Зареждам артикулите…</div>`;
+    ARTS=await api("/api/suppliers/articles?name="+encodeURIComponent(n));PICK=new Set();drawArts();
+  };
+  $("#mk").onclick=async()=>{
+    $("#mk").disabled=true;toast("Създавам бланката…");
+    try{const r=await post("/api/forms/new",{supplier:$("#sup").value.trim(),codes:[...PICK],brochure_no:$("#bn").value||null,
+      promo_from:$("#pf").value||null,promo_to:$("#pt").value||null,price_from:$("#rf").value||null,price_to:$("#rt").value||null,
+      region_varna:$("#rv").checked,region_sofia:$("#rs").checked});
+      SUPS=null;location.hash="f"+r.id;toast("Бланката е създадена. Асен получи известие.")}
+    catch(e){toast(e.message);$("#mk").disabled=false}
+  };
+}
+function drawArts(){
+  const box=$("#arts");
+  if(!ARTS.length){box.innerHTML=`<div class="card muted">Няма продавани артикули от този доставчик.</div>`;return}
+  box.innerHTML=`<div class="card"><div class="r" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-bottom:6px">
+     <b>${ARTS.length} артикула</b><span class="muted" id="cnt"></span><button class="btn" id="top">Топ 10 по продажби</button></div>
+   ${ARTS.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
+      <input type="checkbox" data-c="${a.code}" ${PICK.has(a.code)?"checked":""} style="width:20px;height:20px">
+      <div style="flex:1;min-width:0"><div class="it-n">${esc(a.name)}</div>
+      <div class="prices"><span><b>${a.sales30}</b> бр./30 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
+      ${a.last_promo?`<span>брошура ${esc(a.last_promo)}${a.uplift?` ×${f(a.uplift,1)}`:""}</span>`:""}<span class="code">${a.code}</span></div></div></label>`).join("")}</div>`;
+  const upd=()=>{$("#cnt").textContent=PICK.size?`избрани ${PICK.size}`:"";$("#mk").disabled=!PICK.size};
+  box.querySelectorAll("[data-c]").forEach(cb=>cb.onchange=()=>{const c=+cb.dataset.c;cb.checked?PICK.add(c):PICK.delete(c);upd()});
+  $("#top").onclick=()=>{ARTS.slice(0,10).forEach(a=>PICK.add(a.code));drawArts()};
+  upd();
+}
 async function route(){
   if(!ME){try{ME=await api("/api/me")}catch(e){return}}
+  if(location.hash==="#new"){try{await renderNew()}catch(e){toast(e.message)}return}
   const m=location.hash.match(/^#f(\d+)/);
   try{m?await renderForm(m[1]):await renderList()}catch(e){if(e.message!=="401")toast(e.message)}
 }

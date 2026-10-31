@@ -179,3 +179,84 @@ def fill_original(form: dict, items: list[dict]) -> bytes | None:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def blank_xlsx(form: dict, items: list[dict]) -> bytes:
+    """Бланката на веригата (Приложение 6Б) с нашите цени. Същите заглавия като шаблона,
+    така че ако доставчикът я върне попълнена, системата я чете обратно."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Заявка"
+    bold, red = Font(bold=True), Font(bold=True, color="C0193F")
+    grey = PatternFill("solid", fgColor="D9D9D9")
+    yellow = PatternFill("solid", fgColor="FFF2CC")
+    thin = Side(style="thin", color="999999")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    office = form.get("source") == "office"
+    ws.append(["Приложение № 6Б към Договор за търговско сътрудничество"])
+    ws.append([f"Заявка № {form.get('brochure_no') or '___'} за участие в РЕКЛАМНА БРОШУРА от Доставчик:",
+               None, None, None, None, None, None, None, form.get("supplier") or ""])
+    ws["A2"].font = Font(bold=True, size=13)
+    ws["I2"].font = Font(bold=True, size=13)
+    ws.append([])
+    ws.append(["Брошура — период на промоцията:", None, None, "от", form.get("promo_from"), "до", form.get("promo_to")])
+    ws.append(["Период на промоционалните доставни цени:", None, None, "от", form.get("price_from"), "до",
+               form.get("price_to")])
+    ws.append([])
+    ws.append(["АКТИВАЦИЯ ПО РЕГИОНИ:", None, "Да / Не"])
+    yn = lambda v: "Да" if v else ("Не" if v is False else "")  # noqa: E731
+    ws.append(["Активация — Варна", None, yn(form.get("region_varna"))])
+    ws.append(["Активация — София", None, yn(form.get("region_sofia"))])
+    for r in (4, 5):
+        for col in (5, 7):
+            ws.cell(r, col).number_format = "DD.MM.YYYY"
+    ws.append([])
+    if office:
+        ws.append([f"Цените в жълто са нашето искане: промо доставна цена за минимум {items[0]['min_margin']:.0f}% марж "
+                   "при одобрената промо цена на рафта." if items else ""])
+        ws.cell(ws.max_row, 1).font = red
+    if form.get("note"):
+        ws.append([f"Бележка: {form['note']}"])
+        ws.cell(ws.max_row, 1).font = red
+    head = ["№", "SAF-T", "Артикул", "Баркод", "Базова цена с ДДС (€)", "Т.О. %",
+            "Регулярна доставна цена с ДДС (€)", "Д.Т.О. %", "Промоционална доставна цена с ДДС (€)",
+            "Желан формат на карето", "Одобрен (промо цена рафт €)"]
+    ws.append(head)
+    hr = ws.max_row
+    for c in ws[hr]:
+        c.font, c.fill, c.border = bold, grey, box
+        c.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
+    ws.row_dimensions[hr].height = 45
+    for i, it in enumerate(items, 1):
+        n = lambda v: float(v) if v is not None else None  # noqa: E731
+        if office:
+            dto = it.get("need_dto")
+            promo = it.get("need_delivery")
+        else:
+            dto, promo = n(it.get("dto_pct")), n(it.get("promo"))
+        ws.append([i, it.get("saft"), it.get("m_name") or it["name"], it.get("barcode"), n(it.get("base")),
+                   (n(it.get("to_pct")) or 0) / 100 if it.get("to_pct") is not None else None,
+                   n(it.get("reg")), dto / 100 if dto is not None else None, promo,
+                   form.get("fmt") or form.get("wanted_format"), n(it.get("approved"))])
+        r = ws.max_row
+        for c in ws[r]:
+            c.border = box
+        ws.cell(r, 4).number_format = "@"
+        for col in (5, 7, 9):
+            ws.cell(r, col).number_format = "0.0000"
+        for col in (6, 8):
+            ws.cell(r, col).number_format = "0.00%"
+        ws.cell(r, 11).number_format = "0.00"
+        ws.cell(r, 11).font = red
+        if office:
+            for col in (8, 9):
+                ws.cell(r, col).fill = yellow
+    ws.append([])
+    ws.append([f"Решение: {ST.get(form['status'], form['status'])}"])
+    for col, w in zip("ABCDEFGHIJK", (5, 9, 42, 16, 12, 8, 14, 9, 14, 14, 14)):
+        ws.column_dimensions[col].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

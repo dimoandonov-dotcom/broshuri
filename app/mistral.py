@@ -72,6 +72,16 @@ def _info(cur, codes: list[int]) -> dict[int, dict]:
                     FROM MATERIAL WITH (NOLOCK) WHERE MATERIALCODE IN ({cl}) GROUP BY MATERIALCODE""")
     for r in cur.fetchall():
         info[int(r["code"])].update(name=r["name"], avg_delivery=float(r["avgp"] or 0) or None)
+    mcols = {c.upper() for c in _cols(cur, "MATERIAL")}
+    if "LASTDELIVERYPRICE" in mcols:
+        cur.execute(f"""SELECT MATERIALCODE AS code, MAX(LASTDELIVERYPRICE) AS p FROM MATERIAL WITH (NOLOCK)
+                        WHERE MATERIALCODE IN ({cl}) AND LASTDELIVERYPRICE > 0 GROUP BY MATERIALCODE""")
+        for r in cur.fetchall():
+            info[int(r["code"])]["last_delivery"] = round(float(r["p"]), 4)
+    cur.execute(f"""SELECT STORAGEMATERIALCODE AS code, MAX(CODE) AS bc FROM BARCODE WITH (NOLOCK)
+                    WHERE STORAGEMATERIALCODE IN ({cl}) AND LEN(CODE) BETWEEN 8 AND 14 GROUP BY STORAGEMATERIALCODE""")
+    for r in cur.fetchall():
+        info[int(r["code"])]["barcode"] = str(r["bc"]).strip()
     cur.execute(f"""SELECT pl.MATERIALCODE AS code, pl.PRICE AS price
                     FROM PRICELIST pl WITH (NOLOCK)
                     JOIN PRICELISTNAME pn ON pn.LOCATIONID = pl.LOCATIONID AND pn.ID = pl.PRICELISTID
@@ -117,6 +127,8 @@ def enrich(items: list[dict]) -> tuple[list[dict], list[str]]:
                     if i["prices"] and region == "varna" or (i["prices"] and not r.get("shelf")):
                         r["shelf"] = Counter(i["prices"]).most_common(1)[0][0]
                     r.setdefault("avg_delivery", i.get("avg_delivery"))
+                    r.setdefault("barcode", i.get("barcode"))
+                    r.setdefault("last_delivery", i.get("last_delivery"))
                     r[f"sales30_{region}"] = i.get("sales", 0)
         except Exception as e:  # noqa: BLE001
             notes.append(f"Мистрал {region}: {e}")

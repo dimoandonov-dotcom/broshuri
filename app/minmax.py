@@ -68,3 +68,51 @@ def info(codes: list[int]) -> tuple[dict[int, dict], list[str]]:
     except Exception as e:  # noqa: BLE001
         return {}, [f"MinMaxAI: {e}"]
     return out, []
+
+
+def suppliers() -> list[dict]:
+    """Доставчиците с брой артикули, продавани последните 30 дни."""
+    eng = engine()
+    if not eng:
+        return []
+    with eng.connect() as c:
+        last = c.execute(text("SELECT MAX(day) FROM sa_sales")).scalar()
+        return [{"supplier": s, "n": int(n)} for s, n in c.execute(text("""
+            SELECT a.supplier, COUNT(DISTINCT a.code) FROM sa_articles a
+            WHERE COALESCE(a.supplier, '') <> '' AND EXISTS (
+                SELECT 1 FROM sa_sales x WHERE x.code = a.code AND x.day > :d)
+            GROUP BY a.supplier ORDER BY a.supplier"""), {"d": last - timedelta(days=30)})]
+
+
+def articles(supplier: str) -> list[dict]:
+    """Артикулите на доставчика: продажби 30 дни, марж от касата, наличност, последна брошура."""
+    eng = engine()
+    if not eng:
+        return []
+    with eng.connect() as c:
+        last = c.execute(text("SELECT MAX(day) FROM sa_sales")).scalar()
+        rows = [dict(r._mapping) for r in c.execute(text("""
+            SELECT a.code, a.name, a.grp,
+                   COALESCE(SUM(s.qty), 0) AS sales30, SUM(s.rev) AS rev, SUM(s.cost) AS cost
+            FROM sa_articles a LEFT JOIN sa_sales s ON s.code = a.code AND s.day > :d
+            WHERE a.supplier = :s GROUP BY a.code, a.name, a.grp
+            ORDER BY COALESCE(SUM(s.qty), 0) DESC"""), {"s": supplier, "d": last - timedelta(days=30)})]
+    out = []
+    for r in rows:
+        rev = float(r["rev"] or 0)
+        out.append({"code": r["code"], "name": r["name"], "grp": r["grp"], "sales30": int(round(float(r["sales30"]))),
+                    "margin30": round(100 * (rev - float(r["cost"] or 0)) / rev, 1) if rev > 0 else None})
+    extra, _ = info([r["code"] for r in out[:150]])
+    for r in out:
+        x = extra.get(r["code"], {})
+        r["stock"], r["last_promo"], r["uplift"] = x.get("stock"), x.get("last_promo"), x.get("uplift")
+    return out
+
+
+def names(codes: list[int]) -> dict[int, str]:
+    eng = engine()
+    if not eng or not codes:
+        return {}
+    with eng.connect() as c:
+        return {int(k): v for k, v in c.execute(text("SELECT code, name FROM sa_articles WHERE code = ANY(:c)"),
+                                                {"c": [int(x) for x in codes]})}

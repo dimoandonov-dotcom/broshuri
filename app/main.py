@@ -104,6 +104,9 @@ def enrich_form(form_id: int) -> list[str]:
         db.q("""UPDATE items SET margin30=:a, stock=:b, stores=:c, last_promo=:d, uplift=:e WHERE id=:id""",
              id=r["id"], a=x.get("margin30"), b=x.get("stock"), c=x.get("mm_stores"),
              d=x.get("last_promo"), e=x.get("uplift"))
+        db.q("""UPDATE items SET barcode=COALESCE(barcode, :bc),
+                reg=CASE WHEN reg IS NULL AND (SELECT source FROM forms WHERE id=items.form_id)='office' THEN :ld ELSE reg END
+                WHERE id=:id""", id=r["id"], bc=r.get("barcode"), ld=r.get("last_delivery"))
         db.q("""UPDATE items SET code=:code, m_name=COALESCE(:m_name, m_name), shelf=COALESCE(:shelf, shelf),
                 avg_delivery=:avg_delivery, sales30=:sales30, sales30_varna=:sv, sales30_sofia=:ss,
                 enriched_at=now() WHERE id=:id""",
@@ -151,9 +154,60 @@ async def upload(files: list[UploadFile] = File(...), user: dict = Depends(need(
     return {"ids": out, "errors": errs}
 
 
+# ---------- нова брошура от офиса: доставчик -> артикули ----------
+@app.get("/api/suppliers")
+def suppliers(user: dict = Depends(need("office"))):
+    from . import minmax
+    return minmax.suppliers()
+
+
+@app.get("/api/suppliers/articles")
+def supplier_articles(name: str, user: dict = Depends(need("office"))):
+    from . import minmax
+    return minmax.articles(name)
+
+
+class NewForm(BaseModel):
+    supplier: str
+    codes: list[int]
+    brochure_no: str | None = None
+    promo_from: str | None = None
+    promo_to: str | None = None
+    price_from: str | None = None
+    price_to: str | None = None
+    region_varna: bool = True
+    region_sofia: bool = True
+
+
+@app.post("/api/forms/new")
+async def new_form(p: NewForm, user: dict = Depends(need("office"))):
+    from . import minmax
+    if not p.codes:
+        raise HTTPException(400, "Избери поне един артикул.")
+    names = minmax.names(p.codes)
+    fid = db.one("""INSERT INTO forms (supplier, kind, brochure_no, promo_from, promo_to, price_from, price_to,
+            region_varna, region_sofia, source, created_by)
+        VALUES (:s, 'brochure', :b, :pf, :pt, :rf, :rt, :v, :so, 'office', :u) RETURNING id""",
+                 s=p.supplier.strip(), b=p.brochure_no, pf=p.promo_from or None, pt=p.promo_to or None,
+                 rf=p.price_from or None, rt=p.price_to or None, v=p.region_varna, so=p.region_sofia,
+                 u=user["user"])["id"]
+    for i, c in enumerate(p.codes, 1):
+        db.q("INSERT INTO items (form_id, pos, name, code) VALUES (:f, :p, :n, :c)",
+             f=fid, p=i, n=names.get(c, str(c)), c=c)
+    notes = await run_in_threadpool(enrich_form, fid)
+    if notes:
+        db.q("UPDATE forms SET warnings=:w WHERE id=:id", w="\n".join(notes), id=fid)
+    url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
+    extras.telegram(f"Брошура за цени: {p.supplier} - {len(p.codes)} арт. Чака твоите цени.\n{url}")
+    return {"id": fid}
+
+
 # ---------- четене ----------
 def _num(v):
     return float(v) if v is not None else None
+
+
+MIN_MARGIN = float(os.getenv("MIN_MARGIN", "20"))
 
 
 def _item_calc(it: dict, kind: str) -> dict:
@@ -166,6 +220,10 @@ def _item_calc(it: dict, kind: str) -> dict:
     it["reg_margin"] = round((shelf - reg) / shelf * 100, 1) if shelf and reg is not None else None
     it["off_pct"] = round((1 - app_ / shelf) * 100) if app_ and shelf else None
     it["funded"] = round((shelf - app_) - sup_gives, 4) if app_ and shelf and sup_gives is not None else None
+    # каква промо доставна цена ни трябва, за да имаме MIN_MARGIN при тази рафтова цена
+    it["need_delivery"] = round(app_ * (1 - MIN_MARGIN / 100), 4) if app_ else None
+    it["need_dto"] = round((1 - it["need_delivery"] / reg) * 100, 1) if app_ and reg else None
+    it["min_margin"] = MIN_MARGIN
     return it
 
 
@@ -282,6 +340,13 @@ def answer(fid: int, user: dict = Depends(me)):
     f = db.one("SELECT * FROM forms WHERE id=:id", id=fid)
     items = db.rows("SELECT * FROM items WHERE form_id=:f ORDER BY pos", f=fid)
     return _dl(extras.answer_xlsx(f, items), _fname(f, "отговор"), XLSX)
+
+
+@app.get("/api/forms/{fid}/blank.xlsx")
+def blank(fid: int, user: dict = Depends(me)):
+    f = db.one("SELECT * FROM forms WHERE id=:id", id=fid)
+    items = [_item_calc(it, f["kind"]) for it in db.rows("SELECT * FROM items WHERE form_id=:f ORDER BY pos", f=fid)]
+    return _dl(extras.blank_xlsx(f, items), _fname(f, "бланка 6Б"), XLSX)
 
 
 @app.get("/api/forms/{fid}/filled.xlsx")
