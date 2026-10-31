@@ -206,6 +206,23 @@ function itemHTML(it,kind){
   const need=it.need_delivery!=null?`<span>За ${f(it.min_margin,0)}% марж искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
   const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
   const reg=(lbl,v)=>v==null?"":`<span>${lbl} <b>${v}</b> бр.</span>`;
+  const asen=ME&&ME.role==="approver";
+  const mbox=it.margin!=null
+    ?`<div class="v ${mcls(it.margin)}">${f(it.margin,1)}%</div>`
+    :it.margin_at_reg!=null
+      ?`<div class="v ${mcls(it.margin_at_reg)}" title="при сегашната редовна доставна">${f(it.margin_at_reg,1)}%</div><div class="k" style="text-transform:none">без Д.Т.О. · с искането ${f(it.min_margin,0)}%</div>`
+      :`<div class="v">—</div>`;
+  const buyer=`<div class="grp">${asen?"Твоето решение":"Купувач"}</div>
+    <div class="entry">
+      <div class="fld"><label>Рафт сега</label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
+      <div class="fld"><label>Промо рафт</label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
+      <div class="fld"><label>Отстъпка %</label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
+      <div class="mg"><div class="k">Марж ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
+    </div>`;
+  const supLine=`<div class="prices">${kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:""}
+      <span>База <b>${f(it.base,4)}</b></span><span>Т.О. <b>${it.to_pct!=null?f(it.to_pct,1)+"%":"—"}</b></span>
+      <span>Редовна <b>${f(it.reg,4)}</b></span><span>Д.Т.О. <b class="${it.dto_pct?"g-ok":"g-bad"}">${it.dto_pct!=null?f(it.dto_pct,1)+"%":"няма"}</b></span>
+      <span>Промо дост. <b>${f(it.promo,4)}</b></span></div>`;
   return `<div class="item" data-id="${it.id}">
     <div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
@@ -213,6 +230,7 @@ function itemHTML(it,kind){
       ${it.margin30!=null?`<span>Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
       ${it.last_promo?`<span>Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
     ${it.checks&&it.checks.length?`<div class="chk">${it.checks.map(c=>`<div>⚠ ${esc(c)}</div>`).join("")}</div>`:""}
+    ${asen?buyer+`<div class="prices">${fund}</div><div class="grp">Доставчик · с ДДС</div>`+supLine:`
     <div class="grp">Доставчик · цени ${NET?"<u>без</u>":"с"} ДДС${it.vat!=null?` · ДДС ${f(it.vat,0)}%`:""}${it.reg_src?` · редовна от: ${esc(it.reg_src)}`:""}</div>
     <div class="entry">
       ${kind==="comp"?`<div class="fld"><label>Компенсация/бр.</label><input data-k="comp" value="${nv(it.comp)}" disabled></div>`:""}
@@ -224,18 +242,13 @@ function itemHTML(it,kind){
       ${it.code?"":`<div class="fld"><label>Наш код</label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
     <div class="prices">${fund}</div>
-    <div class="grp">Купувач</div>
-    <div class="entry">
-      <div class="fld"><label>Рафт сега</label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
-      <div class="fld"><label>Промо рафт</label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
-      <div class="fld"><label>Отстъпка %</label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
-      <div class="mg"><div class="k">Марж ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div><div class="v ${mcls(it.margin)}">${it.margin==null?"—":f(it.margin,1)+"%"}</div></div>
-    </div></div>`;
+    ${buyer}`}
+    </div>`;
 }
 async function renderForm(id){
   FORM=await api("/api/forms/"+id);
   const F=FORM, it=F.items;
-  const ms=it.map(x=>x.margin).filter(x=>x!=null);
+  const ms=it.map(x=>x.margin_best).filter(x=>x!=null);
   const tot=it.reduce((a,x)=>a+(x.funded>0&&x.sales30?x.funded*x.sales30:0),0);
   const reg=[F.region_varna?"Варна":null,F.region_sofia?"София":null].filter(Boolean).join(", ")||"—";
   app.innerHTML=`<a class="back" href="#">‹ Всички бланки</a>
@@ -243,8 +256,8 @@ async function renderForm(id){
    <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
   ${(()=>{const n=it.reduce((a,x)=>a+(x.checks?x.checks.length:0),0);return n?`<div class="chk"><b>⚠ ${n} неща за проверка</b> - виж червените полета по редовете.</div>`:""})()}
-  <label class="card" style="display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer"><input type="checkbox" id="net" ${NET?"checked":""} style="width:20px;height:20px">
-    <span><b>Въвеждам цените без ДДС</b><br><span class="muted">системата добавя ДДС по ставката на всеки артикул от Мистрал</span></span></label>
+  ${ME.role==="approver"?"":`<label class="card" style="display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer"><input type="checkbox" id="net" ${NET?"checked":""} style="width:20px;height:20px">
+    <span><b>Въвеждам цените без ДДС</b><br><span class="muted">системата добавя ДДС по ставката на всеки артикул от Мистрал</span></span></label>`}
   <div class="stats"><div class="stat"><div class="n">${it.length}</div><div class="l">артикула</div></div>
    <div class="stat"><div class="n">${it.filter(x=>x.approved!=null).length}</div><div class="l">с цена</div></div>
    <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l">среден марж</div></div>
@@ -268,7 +281,7 @@ async function renderForm(id){
     ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
   </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 30 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
   app.querySelectorAll(".item input").forEach(inp=>inp.onchange=()=>saveItem(inp));
-  $("#net").onchange=()=>{NET=$("#net").checked;try{localStorage.setItem("br_net",NET?"1":"0")}catch(e){}const y=window.scrollY;renderForm(F.id).then(()=>window.scrollTo(0,y))};
+  if($("#net"))$("#net").onchange=()=>{NET=$("#net").checked;try{localStorage.setItem("br_net",NET?"1":"0")}catch(e){}const y=window.scrollY;renderForm(F.id).then(()=>window.scrollTo(0,y))};
   app.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{
     const s=F.status===b.dataset.st?"pending":b.dataset.st;
     await post(`/api/forms/${F.id}`,{status:s,fmt:$("#fmt").value,note:$("#note").value});toast(s==="pending"?"Решението е махнато":ST[s][0]);renderForm(F.id)});

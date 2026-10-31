@@ -278,6 +278,9 @@ def _item_calc(it: dict, kind: str) -> dict:
     sup_gives = comp if kind == "comp" else ((reg - promo) if reg is not None and promo is not None else None)
     it["cost"] = cost
     it["margin"] = round((app_ - cost) / app_ * 100, 1) if app_ and cost is not None else None
+    # ако доставчикът още не е дал промо цена - маржът при сегашната редовна доставна (най-лошият случай)
+    it["margin_at_reg"] = round((app_ - reg) / app_ * 100, 1) if app_ and reg is not None else None
+    it["margin_best"] = it["margin"] if it["margin"] is not None else it["margin_at_reg"]
     it["reg_margin"] = round((shelf - reg) / shelf * 100, 1) if shelf and reg is not None else None
     it["off_pct"] = round((1 - app_ / shelf) * 100) if app_ and shelf else None
     it["funded"] = round((shelf - app_) - sup_gives, 4) if app_ and shelf and sup_gives is not None else None
