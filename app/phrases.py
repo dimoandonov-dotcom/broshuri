@@ -392,8 +392,8 @@ PHRASES = [
 def today_phrase(d) -> str:
     """Връща изречението за деня; d е datetime.date."""
     # по календарна дата (месец + ден), така празниците се падат точно и във високосна година;
-    # 29 февруари ползва резервното 366-о изречение
+    # 29 февруари ползва изречението на 28 февруари
     import datetime as _dt
     if d.month == 2 and d.day == 29:
-        return PHRASES[365]
+        return PHRASES[58]
     return PHRASES[_dt.date(2025, d.month, d.day).timetuple().tm_yday - 1]
