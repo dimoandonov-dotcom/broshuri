@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Брошури</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#eef1f4; --surface:#fff; --sunk:#e3e8ee; --line:#d3dae2;
+  --fg:#18202a; --muted:#5d6876; --pen:#c0193f; --pen-soft:#fbe6eb;
+  --ok:#1d7a4c; --ok-soft:#e2f3ea; --warn:#a86500; --warn-soft:#fbf0dc; --bad:#b3261e; --bad-soft:#fbe4e2;
+  --f-d:"Unbounded","Golos Text",system-ui,sans-serif; --f-b:"Golos Text",system-ui,-apple-system,sans-serif;
+  --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#11161c; --surface:#19212a; --sunk:#222c37; --line:#2e3a47; --fg:#e8edf2; --muted:#93a0ae;
+  --pen:#ff5a7d; --pen-soft:#3a1822; --ok:#4fc58a; --ok-soft:#163327; --warn:#f0a83a; --warn-soft:#3a2a10;
+  --bad:#ff7a70; --bad-soft:#3d1a18; color-scheme:dark}}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-b)}
+[hidden]{display:none!important}
+.wrap{max-width:880px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 110px;display:flex;flex-direction:column;gap:14px}
+h1{font-family:var(--f-d);font-size:1.35rem;margin:0}
+h1 span{color:var(--pen)}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.top .sp{flex:1}
+.muted{color:var(--muted);font-size:.85rem}
+.btn{font:inherit;font-weight:600;font-size:.88rem;padding:9px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn.pri{background:var(--pen);border-color:var(--pen);color:#fff}
+.btn:disabled{opacity:.5}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--pen);outline-offset:1px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:.85rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.list{display:flex;flex-direction:column;gap:8px}
+.row-f{display:flex;gap:12px;align-items:center;cursor:pointer;text-decoration:none;color:inherit}
+.row-f .nm{font-weight:700}
+.row-f .g{flex:1;min-width:0}
+.badge{font-size:.72rem;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.b-pending{background:var(--sunk);color:var(--muted)}.b-approved{background:var(--ok-soft);color:var(--ok)}
+.b-counter{background:var(--warn-soft);color:var(--warn)}.b-rejected{background:var(--bad-soft);color:var(--bad)}
+.b-sent{background:var(--ok);color:#fff}
+.warn{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.84rem;white-space:pre-line}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.stat .n{font-family:var(--f-d);font-size:1.15rem;font-variant-numeric:tabular-nums}
+.stat .l{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.item{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-bottom:1px dashed var(--line)}
+.item:last-child{border-bottom:0}
+.it-n{font-weight:600}
+.code{font-family:var(--f-m);font-size:.72rem;color:var(--muted);overflow-wrap:anywhere}
+.code b{color:var(--pen)}
+.prices{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.prices b{color:var(--fg)}
+.g-ok{color:var(--ok)}.g-bad{color:var(--bad)}
+.entry{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.fld{display:flex;flex-direction:column;gap:3px}
+.fld label{font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.fld input{width:84px;font:inherit;font-family:var(--f-m);font-size:.95rem;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.fld input.pen{color:var(--pen);border-color:var(--pen);background:var(--pen-soft);font-weight:600}
+.fld input:disabled{opacity:.7}
+.mg{margin-left:auto;text-align:right;min-width:80px}
+.mg .v{font-family:var(--f-m);font-weight:600}
+.mg .k{font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.m-good{color:var(--ok)}.m-mid{color:var(--warn)}.m-low{color:var(--bad)}
+.dec{display:flex;flex-direction:column;gap:10px}
+.dec .r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select,textarea,.inp{font:inherit;font-size:.9rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+textarea{width:100%;min-height:44px}
+.btn.a[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.c[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#fff}
+.btn.x[aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+.login{max-width:340px;margin:12vh auto 0;display:flex;flex-direction:column;gap:10px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:18px;text-align:center;color:var(--muted)}
+.drop.on{border-color:var(--pen);color:var(--pen)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:.85rem;z-index:9;max-width:90vw}
+.back{font-size:.9rem;color:var(--muted);text-decoration:none}
+@media(max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}.fld input{width:74px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast" hidden></div>
+<script>
+const $=s=>document.querySelector(s), app=$("#app");
+const ST={pending:["Чака решение","b-pending"],approved:["Одобрена","b-approved"],counter:["Контраоферта","b-counter"],rejected:["Отказана","b-rejected"]};
+let ME=null, FILTER="pending", FORM=null;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f=(n,d=2)=>n==null||isNaN(n)?"—":Number(n).toFixed(d).replace(".",",");
+const num=v=>{v=String(v).replace(",",".").trim();return v===""?null:Number(v)};
+const dt=s=>s?s.slice(8,10)+"."+s.slice(5,7):"";
+const canDecide=()=>ME&&["approver","admin"].includes(ME.role);
+const isOffice=()=>ME&&["office","admin"].includes(ME.role);
+function toast(t){const e=$("#toast");e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2600)}
+async function api(p,o={}){
+  const r=await fetch(p,{credentials:"same-origin",...o,headers:o.body&&!(o.body instanceof FormData)?{"Content-Type":"application/json"}:{}});
+  if(r.status===401){ME=null;renderLogin();throw new Error("401")}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail||"Грешка");
+  return j;
+}
+const post=(p,b)=>api(p,{method:"POST",body:JSON.stringify(b)});
+
+function renderLogin(msg){
+  app.innerHTML=`<form class="login card" id="lf"><h1>Брошури</h1>
+   <input class="inp" id="lu" placeholder="Потребител" autocomplete="username" autocapitalize="none">
+   <input class="inp" id="lp" placeholder="ПИН" type="password" inputmode="numeric" autocomplete="current-password">
+   <button class="btn pri" type="submit">Вход</button><div class="muted">${esc(msg||"")}</div></form>`;
+  $("#lf").onsubmit=async e=>{e.preventDefault();try{ME=await post("/api/login",{user:$("#lu").value,pin:$("#lp").value});route()}catch(err){renderLogin(err.message)}};
+}
+
+async function renderList(){
+  const forms=await api("/api/forms");
+  const cnt=k=>forms.filter(x=>k==="all"||x.status===k).length;
+  const shown=forms.filter(x=>FILTER==="all"||x.status===FILTER);
+  app.innerHTML=`<div class="top"><h1>Брошури</h1><span class="sp"></span><span class="muted">${esc(ME.user)}</span><button class="btn" id="lo">Изход</button></div>
+  ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
+     <b>Качи бланки</b><br><span class="muted">Excel, PDF или снимка - може няколко наведнъж</span></label>
+     <div class="top"><span class="muted">Бланките по имейл се прибират сами на 5 мин.</span><span class="sp"></span><button class="btn" id="mc">Провери пощата</button></div>`:""}
+  <div class="chips">${[["pending","Чакат"],["counter","Контраоферта"],["approved","Одобрени"],["rejected","Отказани"],["all","Всички"]]
+    .map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${FILTER===k}">${l} · ${cnt(k)}</button>`).join("")}</div>
+  <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
+      <div class="nm">${esc(x.supplier||"Без име на доставчик")}</div>
+      <div class="muted">${x.kind==="comp"?"Компенсация":"Брошура"}${x.brochure_no?" № "+esc(x.brochure_no):""} · ${x.n_items} арт. · ${dt(x.promo_from)}–${dt(x.promo_to)}${x.has_warn?" · ⚠":""}${x.source==="email"?" · имейл":""}</div></div>
+      ${x.sent_at?`<span class="badge b-sent">Изпратена</span>`:""}<span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
+    ||`<div class="card muted">Няма бланки тук.</div>`}</div>`;
+  $("#lo").onclick=async()=>{await post("/api/logout",{});ME=null;renderLogin()};
+  app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderList()});
+  if(isOffice()){
+    const d=$("#drop"),fi=$("#fi");
+    fi.onchange=()=>upload(fi.files);
+    d.ondragover=e=>{e.preventDefault();d.classList.add("on")};d.ondragleave=()=>d.classList.remove("on");
+    d.ondrop=e=>{e.preventDefault();d.classList.remove("on");upload(e.dataTransfer.files)};
+    $("#mc").onclick=async()=>{toast("Проверявам пощата…");try{const r=await post("/api/mail/check",{});toast(r.new?`Нови бланки: ${r.new}`:"Няма нови бланки");renderList()}catch(e){toast(e.message)}};
+  }
+}
+async function upload(files){
+  if(!files.length)return;
+  const fd=new FormData();[...files].forEach(x=>fd.append("files",x));
+  toast(`Разчитам ${files.length} файл(а)… около 20 сек. на бланка`);
+  try{const r=await api("/api/upload",{method:"POST",body:fd});
+    toast(r.errors.length?r.errors.join(" · "):`Готово: ${r.ids.length} бланки`);
+    if(r.ids.length===1)location.hash="f"+r.ids[0];else renderList();
+  }catch(e){toast(e.message)}
+}
+
+const mcls=m=>m==null?"":m>=22?"m-good":m>=15?"m-mid":"m-low";
+function itemHTML(it,kind){
+  const dis=canDecide()?"":"disabled";
+  const sup=kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:(it.dto_pct?`<span class="g-ok">Д.Т.О. ${f(it.dto_pct,1)}%</span>`:`<span class="g-bad">без отстъпка</span>`);
+  const fund=it.funded==null?"":it.funded>0.005?`<span class="g-bad">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`;
+  return `<div class="item" data-id="${it.id}">
+    <div><div class="it-n">${esc(it.name)}</div>
+    <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
+    <div class="prices"><span>Редовна дост. <b>${f(it.reg,4)}</b></span><span>Промо дост. <b>${f(it.cost,4)}</b></span>${sup}
+      ${it.reg_margin!=null?`<span>Марж сега <b>${f(it.reg_margin,1)}%</b></span>`:""}${fund}</div>
+    <div class="entry">
+      <div class="fld"><label>Продажби 30 д.</label><input data-k="sales30" inputmode="numeric" value="${it.sales30??""}" title="Варна ${it.sales30_varna??"—"} · София ${it.sales30_sofia??"—"}"></div>
+      ${it.code?"":`<div class="fld"><label>Наш код</label><input data-k="code" inputmode="numeric" value=""></div>`}
+      <div class="fld"><label>Рафт сега</label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
+      <div class="fld"><label>Промо рафт</label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
+      <div class="fld"><label>Отстъпка %</label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
+      <div class="mg"><div class="k">Марж</div><div class="v ${mcls(it.margin)}">${it.margin==null?"—":f(it.margin,1)+"%"}</div></div>
+    </div></div>`;
+}
+async function renderForm(id){
+  FORM=await api("/api/forms/"+id);
+  const F=FORM, it=F.items;
+  const ms=it.map(x=>x.margin).filter(x=>x!=null);
+  const tot=it.reduce((a,x)=>a+(x.funded>0&&x.sales30?x.funded*x.sales30:0),0);
+  const reg=[F.region_varna?"Варна":null,F.region_sofia?"София":null].filter(Boolean).join(", ")||"—";
+  app.innerHTML=`<a class="back" href="#">‹ Всички бланки</a>
+  <div><h1>${esc(F.supplier||"Без име на доставчик")}</h1>
+   <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
+  ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
+  <div class="stats"><div class="stat"><div class="n">${it.length}</div><div class="l">артикула</div></div>
+   <div class="stat"><div class="n">${it.filter(x=>x.approved!=null).length}</div><div class="l">с цена</div></div>
+   <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l">среден марж</div></div>
+   <div class="stat"><div class="n">${f(tot,0)} €</div><div class="l">доплащаме*</div></div></div>
+  <div class="card">${it.map(x=>itemHTML(x,F.kind)).join("")}</div>
+  <div class="card dec">
+    <div class="r"><label class="muted" for="fmt">Формат</label><select id="fmt" ${canDecide()?"":"disabled"}>${["","Единично каре","А5","А4","Брошура"].map(o=>`<option ${o===(F.fmt||"")?"selected":""}>${o}</option>`).join("")}</select>
+      ${F.wanted_format?`<span class="muted">Искат: ${esc(F.wanted_format)}</span>`:""}</div>
+    <textarea id="note" placeholder="Бележка към доставчика (напр. искаме по-висока Д.Т.О.)" ${canDecide()?"":"disabled"}>${esc(F.note||"")}</textarea>
+    ${canDecide()?`<div class="r">${[["approved","Одобри","a"],["counter","Контраоферта","c"],["rejected","Откажи","x"]]
+      .map(([k,l,c])=>`<button class="btn ${c}" data-st="${k}" aria-pressed="${F.status===k}">${l}</button>`).join("")}</div>`
+      :`<div><span class="badge ${ST[F.status][1]}">${ST[F.status][0]}</span> ${F.decided_by?`<span class="muted">от ${esc(F.decided_by)}</span>`:""}</div>`}
+  </div>
+  <div class="card dec"><div class="r">
+    <a class="btn pri" href="/api/forms/${F.id}/answer.xlsx">Отговор Excel</a>
+    ${(F.file_name||"").toLowerCase().match(/\.xls[xm]$/)?`<a class="btn" href="/api/forms/${F.id}/filled.xlsx">Попълнена оригинална бланка</a>`:""}
+    <a class="btn" href="/api/forms/${F.id}/original">Оригинал</a>
+    <button class="btn" id="rf">Обнови от Мистрал</button>
+    ${isOffice()?(F.sent_at?`<span class="badge b-sent">Изпратена ${dt(F.sent_at)}</span>`:`<button class="btn" id="sent" ${F.status==="pending"?"disabled":""}>Отбележи изпратена</button>`):""}
+    ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
+  </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 30 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
+  app.querySelectorAll(".item input").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  app.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{
+    const s=F.status===b.dataset.st?"pending":b.dataset.st;
+    await post(`/api/forms/${F.id}`,{status:s,fmt:$("#fmt").value,note:$("#note").value});toast(s==="pending"?"Решението е махнато":ST[s][0]);renderForm(F.id)});
+  if(canDecide()){$("#fmt").onchange=()=>post(`/api/forms/${F.id}`,{fmt:$("#fmt").value});$("#note").onchange=()=>post(`/api/forms/${F.id}`,{note:$("#note").value}).then(()=>toast("Бележката е записана"))}
+  $("#rf").onclick=async()=>{toast("Обновявам от Мистрал…");const r=await post(`/api/forms/${F.id}/refresh`,{});toast(r.notes&&r.notes.length?r.notes.join(" · "):"Обновено");renderForm(F.id)};
+  if($("#sent"))$("#sent").onclick=async()=>{await post(`/api/forms/${F.id}/sent`,{});toast("Отбелязана като изпратена");renderForm(F.id)};
+  if($("#del")){let armed=false;$("#del").onclick=async e=>{if(!armed){armed=true;e.target.textContent="Сигурен ли си? Натисни пак";return}
+    await api(`/api/forms/${F.id}`,{method:"DELETE"});toast("Изтрита");location.hash=""}}
+}
+async function saveItem(inp){
+  const id=inp.closest(".item").dataset.id, k=inp.dataset.k, v=num(inp.value), it=FORM.items.find(x=>x.id==id);
+  let body={};
+  if(k==="pct"){if(!it.shelf||v==null){toast("Първо въведи рафтовата цена");return}body.approved=Math.round(it.shelf*(1-v/100)*100)/100}
+  else if(k==="approved"&&v==null)body.clear_approved=true;
+  else body[k]=k==="sales30"||k==="code"?Math.round(v):v;
+  try{FORM=await post("/api/items/"+id,body);const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y)}catch(e){toast(e.message)}
+}
+async function route(){
+  if(!ME){try{ME=await api("/api/me")}catch(e){return}}
+  const m=location.hash.match(/^#f(\d+)/);
+  try{m?await renderForm(m[1]):await renderList()}catch(e){if(e.message!=="401")toast(e.message)}
+}
+addEventListener("hashchange",route);route();
+</script>
+</body>
+</html>
