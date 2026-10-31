@@ -91,8 +91,24 @@ def whoami(user: dict = Depends(me)):
 ITEM_COLS = ("name", "barcode", "saft", "base", "to_pct", "reg", "dto_pct", "promo", "comp")
 
 
+def supkey(name: str | None) -> str:
+    return " ".join((name or "").upper().replace("„", "").replace("“", "").replace('"', "").split())
+
+
+def remember_reg(supplier: str | None, code: int | None, reg, source: str, user: str = ""):
+    """Запомня редовната доставна цена на доставчика за артикула - ползва се в следващата му брошура."""
+    if not code or reg is None or not supkey(supplier):
+        return
+    db.q("""INSERT INTO supplier_prices (supplier, code, reg, source, updated_by) VALUES (:s, :c, :r, :src, :u)
+            ON CONFLICT (supplier, code) DO UPDATE SET reg=EXCLUDED.reg, source=EXCLUDED.source,
+            updated_by=EXCLUDED.updated_by, updated_at=now()""",
+         s=supkey(supplier), c=int(code), r=reg, src=source, u=user)
+
+
 def enrich_form(form_id: int) -> list[str]:
     items = db.rows("SELECT id, barcode, code FROM items WHERE form_id=:f ORDER BY pos", f=form_id)
+    fm = db.one("SELECT supplier, source FROM forms WHERE id=:id", id=form_id) or {}
+    office, sup_key = fm.get("source") == "office", supkey(fm.get("supplier"))
     res, notes = mistral.enrich(items)
     from . import minmax
     mm, mm_notes = minmax.info([r["code"] for r in res if r.get("code")])
@@ -104,9 +120,16 @@ def enrich_form(form_id: int) -> list[str]:
         db.q("""UPDATE items SET margin30=:a, stock=:b, stores=:c, last_promo=:d, uplift=:e WHERE id=:id""",
              id=r["id"], a=x.get("margin30"), b=x.get("stock"), c=x.get("mm_stores"),
              d=x.get("last_promo"), e=x.get("uplift"))
-        db.q("""UPDATE items SET barcode=COALESCE(barcode, :bc),
-                reg=CASE WHEN reg IS NULL AND (SELECT source FROM forms WHERE id=items.form_id)='office' THEN :ld ELSE reg END
-                WHERE id=:id""", id=r["id"], bc=r.get("barcode"), ld=r.get("last_delivery"))
+        db.q("UPDATE items SET barcode=COALESCE(barcode, :bc) WHERE id=:id", id=r["id"], bc=r.get("barcode"))
+        # бланка от офиса без редовна цена: първо запомнената за този доставчик, после последната от Мистрал
+        if office and r.get("code"):
+            row = db.one("SELECT reg FROM items WHERE id=:id", id=r["id"])
+            if row and row["reg"] is None:
+                mem = db.one("SELECT reg FROM supplier_prices WHERE supplier=:s AND code=:c", s=sup_key, c=r["code"])
+                if mem:
+                    db.q("UPDATE items SET reg=:v, reg_src='запомнена' WHERE id=:id", v=mem["reg"], id=r["id"])
+                elif r.get("last_delivery"):
+                    db.q("UPDATE items SET reg=:v, reg_src='Мистрал' WHERE id=:id", v=r["last_delivery"], id=r["id"])
         db.q("""UPDATE items SET code=:code, m_name=COALESCE(:m_name, m_name), shelf=COALESCE(:shelf, shelf),
                 avg_delivery=:avg_delivery, sales30=:sales30, sales30_varna=:sv, sales30_sofia=:ss,
                 enriched_at=now() WHERE id=:id""",
@@ -133,6 +156,9 @@ def ingest(data: bytes, name: str, ctype: str, source: str = "upload", source_fr
         db.q(f"""INSERT INTO items (form_id, pos, {', '.join(ITEM_COLS)})
                  VALUES (:f, :pos, {', '.join(':' + c for c in ITEM_COLS)})""", f=fid, pos=i, **it)
     notes = enrich_form(fid)
+    db.q("UPDATE items SET reg_src='доставчик' WHERE form_id=:f AND reg IS NOT NULL", f=fid)
+    for it in db.rows("SELECT code, reg FROM items WHERE form_id=:f AND code IS NOT NULL AND reg IS NOT NULL", f=fid):
+        remember_reg(p["supplier"], it["code"], it["reg"], "бланка от доставчика", user)
     if notes:
         w = "\n".join(filter(None, ["\n".join(p["warnings"]), *notes]))
         db.q("UPDATE forms SET warnings=:w WHERE id=:id", w=w, id=fid)
@@ -299,6 +325,7 @@ class ItemPatch(BaseModel):
     code: int | None = None
     sales30: int | None = None
     item_note: str | None = None
+    reg: float | None = None
     clear_approved: bool = False
 
 
@@ -315,6 +342,10 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
         v = getattr(p, k)
         if v is not None:
             db.q(f"UPDATE items SET {k}=:v WHERE id=:id", v=v, id=iid)
+    if p.reg is not None:
+        db.q("UPDATE items SET reg=:v, reg_src='офис' WHERE id=:id", v=p.reg, id=iid)
+        row = db.one("""SELECT f.supplier, i.code FROM items i JOIN forms f ON f.id=i.form_id WHERE i.id=:id""", id=iid)
+        remember_reg(row["supplier"], row["code"], p.reg, "поправена", user["user"])
     if p.code is not None:
         enrich_form(it["form_id"])
     return get_form(it["form_id"], user)
