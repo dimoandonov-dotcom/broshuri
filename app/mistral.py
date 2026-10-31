@@ -72,12 +72,24 @@ def _info(cur, codes: list[int]) -> dict[int, dict]:
                     FROM MATERIAL WITH (NOLOCK) WHERE MATERIALCODE IN ({cl}) GROUP BY MATERIALCODE""")
     for r in cur.fetchall():
         info[int(r["code"])].update(name=r["name"], avg_delivery=float(r["avgp"] or 0) or None)
-    mcols = {c.upper() for c in _cols(cur, "MATERIAL")}
-    if "LASTDELIVERYPRICE" in mcols:
-        cur.execute(f"""SELECT MATERIALCODE AS code, MAX(LASTDELIVERYPRICE) AS p FROM MATERIAL WITH (NOLOCK)
-                        WHERE MATERIALCODE IN ({cl}) AND LASTDELIVERYPRICE > 0 GROUP BY MATERIALCODE""")
-        for r in cur.fetchall():
-            info[int(r["code"])]["last_delivery"] = round(float(r["p"]), 4)
+    # последната доставка: редът с най-нова дата (не MAX на цената - стари обекти пазят стари цени),
+    # с ДДС и без ДДС -> от тях и ставката на ДДС за артикула
+    cur.execute(f"""SELECT MATERIALCODE AS code, LASTDELIVERYDATE AS d, LASTDELIVERYPRICE AS p,
+                           LASTDELIVERYPRICEWOTAX AS pn, TAXGROUPID AS tg
+                    FROM MATERIAL WITH (NOLOCK)
+                    WHERE MATERIALCODE IN ({cl}) AND LASTDELIVERYPRICE > 0 AND LASTDELIVERYPRICEWOTAX > 0""")
+    best: dict[int, dict] = {}
+    tg_rate: dict = {}
+    for r in cur.fetchall():
+        code = int(r["code"])
+        p, pn = float(r["p"]), float(r["pn"])
+        rate = min((0, 9, 20), key=lambda x: abs((p / pn - 1) * 100 - x))
+        tg_rate.setdefault(r["tg"], rate)
+        if code not in best or (r["d"] and (best[code]["d"] is None or r["d"] > best[code]["d"])):
+            best[code] = {"d": r["d"], "p": p, "pn": pn, "rate": rate}
+    for code, b in best.items():
+        info[code].update(last_delivery=round(b["p"], 4), last_delivery_net=round(b["pn"], 4), vat=b["rate"],
+                          last_delivery_date=b["d"].date().isoformat() if b["d"] else None)
     cur.execute(f"""SELECT STORAGEMATERIALCODE AS code, MAX(CODE) AS bc FROM BARCODE WITH (NOLOCK)
                     WHERE STORAGEMATERIALCODE IN ({cl}) AND LEN(CODE) BETWEEN 8 AND 14 GROUP BY STORAGEMATERIALCODE""")
     for r in cur.fetchall():
@@ -129,6 +141,8 @@ def enrich(items: list[dict]) -> tuple[list[dict], list[str]]:
                     r.setdefault("avg_delivery", i.get("avg_delivery"))
                     r.setdefault("barcode", i.get("barcode"))
                     r.setdefault("last_delivery", i.get("last_delivery"))
+                    for k in ("last_delivery_net", "vat", "last_delivery_date"):
+                        r.setdefault(k, i.get(k))
                     r[f"sales30_{region}"] = i.get("sales", 0)
         except Exception as e:  # noqa: BLE001
             notes.append(f"Мистрал {region}: {e}")

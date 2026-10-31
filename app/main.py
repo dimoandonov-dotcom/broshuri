@@ -130,7 +130,9 @@ def enrich_form(form_id: int) -> list[str]:
         db.q("""UPDATE items SET margin30=:a, stock=:b, stores=:c, last_promo=:d, uplift=:e WHERE id=:id""",
              id=r["id"], a=x.get("margin30"), b=x.get("stock"), c=x.get("mm_stores"),
              d=x.get("last_promo"), e=x.get("uplift"))
-        db.q("UPDATE items SET barcode=COALESCE(barcode, :bc) WHERE id=:id", id=r["id"], bc=r.get("barcode"))
+        db.q("""UPDATE items SET barcode=COALESCE(barcode, :bc), vat=COALESCE(:vat, vat, 20),
+                m_delivery=:md, m_delivery_date=:mdd WHERE id=:id""", id=r["id"], bc=r.get("barcode"),
+             vat=r.get("vat"), md=r.get("last_delivery"), mdd=r.get("last_delivery_date"))
         # бланка от офиса без редовна цена: първо запомнената за този доставчик, после последната от Мистрал
         if office and r.get("code"):
             row = db.one("SELECT reg FROM items WHERE id=:id", id=r["id"])
@@ -283,7 +285,39 @@ def _item_calc(it: dict, kind: str) -> dict:
     it["need_delivery"] = round(app_ * (1 - MIN_MARGIN / 100), 4) if app_ else None
     it["need_dto"] = round((1 - it["need_delivery"] / reg) * 100, 1) if app_ and reg else None
     it["min_margin"] = MIN_MARGIN
+    it["checks"] = checks(it, kind)
     return it
+
+
+def checks(it: dict, kind: str) -> list[str]:
+    """Проверки за грешки на персонала - показват се в червено на реда."""
+    out = []
+    n = lambda k: float(it[k]) if it.get(k) is not None else None  # noqa: E731
+    base, reg, promo, dto = n("base"), n("reg"), n("promo"), n("dto_pct")
+    md, vat, app_, shelf, cost = n("m_delivery"), n("vat") or 20, n("approved"), n("shelf"), it.get("cost")
+    if not it.get("code"):
+        out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода.")
+    if reg and md:
+        net = md / (1 + vat / 100)
+        if abs(reg - net) / net < 0.03 and vat:
+            out.append(f"Редовната цена {reg:.4f} изглежда БЕЗ ДДС (последна доставка без ДДС {net:.4f}). "
+                       f"С ДДС {vat:.0f}% е {reg * (1 + vat / 100):.4f}.")
+        elif abs(reg - md) / md > 0.10:
+            out.append(f"Редовната цена се различава с {(reg / md - 1) * 100:+.0f}% от последната доставка "
+                       f"({md:.4f} € с ДДС{', ' + str(it.get('m_delivery_date')) if it.get('m_delivery_date') else ''}).")
+    if base is not None and reg is not None and base + 1e-6 < reg:
+        out.append("Базовата цена е по-ниска от редовната доставна.")
+    if kind != "comp" and promo is not None and reg is not None and promo > reg + 1e-6:
+        out.append("Промо доставната цена е по-висока от редовната.")
+    if dto is not None and dto > 40:
+        out.append(f"Д.Т.О. {dto:.1f}% е необичайно голяма - проверете дали не е въведена цена вместо процент.")
+    if n("to_pct") is not None and n("to_pct") > 40:
+        out.append("Т.О. над 40% - проверете.")
+    if app_ is not None and cost is not None and app_ <= cost:
+        out.append("Промо цената на рафта е под доставната - губим от всяка бройка.")
+    if app_ is not None and shelf is not None and app_ > shelf + 1e-6:
+        out.append("Промо цената е по-висока от сегашната цена на рафта.")
+    return out
 
 
 SUMMARY = """SELECT f.id, f.supplier, f.kind, f.brochure_no, f.promo_from, f.promo_to, f.status, f.source,
@@ -343,6 +377,7 @@ class ItemPatch(BaseModel):
     to_pct: float | None = None
     dto_pct: float | None = None
     promo: float | None = None
+    net: bool = False          # цените са въведени БЕЗ ДДС - системата добавя ДДС по ставката на артикула
     clear_approved: bool = False
 
 
@@ -361,6 +396,11 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
             db.q(f"UPDATE items SET {k}=:v WHERE id=:id", v=v, id=iid)
     # цени от доставчика, въведени от офиса: базова -> (Т.О.) -> редовна -> (Д.Т.О.) -> промо доставна
     prices = {k: getattr(p, k) for k in ("base", "to_pct", "reg", "dto_pct", "promo") if getattr(p, k) is not None}
+    if prices and p.net:
+        vat = float((db.one("SELECT vat FROM items WHERE id=:id", id=iid) or {}).get("vat") or 20)
+        for k in ("base", "reg", "promo"):
+            if k in prices:
+                prices[k] = round(prices[k] * (1 + vat / 100), 4)
     if prices:
         cur = db.one("SELECT base, to_pct, reg, dto_pct, promo FROM items WHERE id=:id", id=iid)
         v = {k: (float(x) if x is not None else None) for k, x in cur.items()}
