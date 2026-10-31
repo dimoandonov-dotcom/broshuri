@@ -106,6 +106,18 @@ textarea{width:100%;min-height:44px}
 .search{width:100%;font-size:1rem;padding:11px 12px}
 .hit{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line);cursor:pointer;background:none;border-left:0;border-right:0;border-top:0;width:100%;text-align:left;font:inherit;color:inherit}
 @media (prefers-reduced-motion:reduce){.logo .spk,.logo .pop,.hero .ph{animation:none;opacity:1;stroke-dashoffset:0}}
+.q{font-style:normal;display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--sunk);color:var(--muted);font-size:.62rem;font-weight:700;margin-left:2px;vertical-align:1px}
+[data-h]{cursor:help}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:3px solid var(--pen);border-radius:16px 16px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.25);padding-top:16px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));max-height:70vh;overflow:auto;animation:rise .25s ease}
+.sheet h3{margin:0 0 6px;font-family:var(--f-d);font-size:1rem}
+.sheet p{margin:6px 0;line-height:1.5}
+.sheet .ex{background:var(--sunk);border-radius:8px;padding:8px 10px;font-size:.88rem}
+.hdoc h2{font-family:var(--f-d);font-size:1.05rem;margin:6px 0 0}
+.hdoc dl{margin:0;display:flex;flex-direction:column;gap:10px}
+.hdoc dt{font-weight:700}
+.hdoc dd{margin:2px 0 0;color:var(--fg);line-height:1.5}
+.hdoc dd .ex{display:block;margin-top:4px;background:var(--sunk);border-radius:8px;padding:6px 9px;font-size:.86rem}
+.hdoc ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -164,7 +176,7 @@ async function renderList(){
   const [forms]=await Promise.all([api("/api/forms"),today()]);
   const cnt=k=>forms.filter(x=>k==="all"||x.status===k).length;
   const shown=forms.filter(x=>FILTER==="all"||x.status===FILTER);
-  app.innerHTML=`<div class="top"><h1>Брошури <span>300</span></h1><span class="sp"></span><button class="btn" id="lo">Изход</button></div>
+  app.innerHTML=`<div class="top"><h1>Брошури <span>300</span></h1><span class="sp"></span><a class="btn" href="#help">? Помощ</a><button class="btn" id="lo">Изход</button></div>
   ${heroHTML()}
   ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
      <b>Качи бланки</b><br><span class="muted">Excel, PDF или снимка - може няколко наведнъж</span></label>
@@ -203,9 +215,9 @@ function itemHTML(it,kind){
   const vr=1+(Number(it.vat??20))/100;
   const nv=v=>v==null?"":String(Number(v)).replace(".",",");
   const pv=v=>v==null?"":String(NET?Math.round(Number(v)/vr*10000)/10000:Number(v)).replace(".",",");
-  const need=it.need_delivery!=null?`<span>За ${f(it.min_margin,0)}% марж искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
-  const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
-  const reg=(lbl,v)=>v==null?"":`<span>${lbl} <b>${v}</b> бр.</span>`;
+  const need=it.need_delivery!=null?`<span data-h="need">За ${f(it.min_margin,0)}% марж искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
+  const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad" data-h="funded">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
+  const reg=(lbl,v)=>v==null?"":`<span data-h="sales">${lbl} <b>${v}</b> бр.</span>`;
   const asen=ME&&ME.role==="approver";
   const mbox=it.margin!=null
     ?`<div class="v ${mcls(it.margin)}">${f(it.margin,1)}%</div>`
@@ -214,10 +226,10 @@ function itemHTML(it,kind){
       :`<div class="v">—</div>`;
   const buyer=`<div class="grp">${asen?"Твоето решение":"Купувач"}</div>
     <div class="entry">
-      <div class="fld"><label>Рафт сега</label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
-      <div class="fld"><label>Промо рафт</label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
-      <div class="fld"><label>Отстъпка %</label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
-      <div class="mg"><div class="k">Марж ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
+      <div class="fld"><label data-h="shelf">Рафт сега <i class="q">?</i></label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
+      <div class="fld"><label data-h="approved">Промо рафт <i class="q">?</i></label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
+      <div class="fld"><label data-h="off">Отстъпка % <i class="q">?</i></label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
+      <div class="mg" data-h="margin"><div class="k">Марж <i class="q">?</i> ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
     </div>`;
   const supLine=`<div class="prices">${kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:""}
       <span>База <b>${f(it.base,4)}</b></span><span>Т.О. <b>${it.to_pct!=null?f(it.to_pct,1)+"%":"—"}</b></span>
@@ -226,20 +238,20 @@ function itemHTML(it,kind){
   return `<div class="item" data-id="${it.id}">
     <div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
-    <div class="prices">${reg("Продажби 30 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span>Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
-      ${it.margin30!=null?`<span>Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
-      ${it.last_promo?`<span>Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
-    ${it.checks&&it.checks.length?`<div class="chk">${it.checks.map(c=>`<div>⚠ ${esc(c)}</div>`).join("")}</div>`:""}
+    <div class="prices">${reg("Продажби 30 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span data-h="stock">Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
+      ${it.margin30!=null?`<span data-h="margin30">Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
+      ${it.last_promo?`<span data-h="lastpromo">Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
+    ${it.checks&&it.checks.length?`<div class="chk" data-h="checks">${it.checks.map(c=>`<div>⚠ ${esc(c)}</div>`).join("")}</div>`:""}
     ${asen?buyer+`<div class="prices">${fund}</div><div class="grp">Доставчик · с ДДС</div>`+supLine:`
     <div class="grp">Доставчик · цени ${NET?"<u>без</u>":"с"} ДДС${it.vat!=null?` · ДДС ${f(it.vat,0)}%`:""}${it.reg_src?` · редовна от: ${esc(it.reg_src)}`:""}</div>
     <div class="entry">
-      ${kind==="comp"?`<div class="fld"><label>Компенсация/бр.</label><input data-k="comp" value="${nv(it.comp)}" disabled></div>`:""}
-      <div class="fld"><label>Базова с ДДС</label><input data-k="base" inputmode="decimal" value="${pv(it.base)}"></div>
-      <div class="fld"><label>Т.О. %</label><input data-k="to_pct" inputmode="decimal" value="${nv(it.to_pct)}"></div>
-      <div class="fld"><label>Редовна дост.</label><input data-k="reg" inputmode="decimal" value="${pv(it.reg)}"></div>
-      <div class="fld"><label>Д.Т.О. %</label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}"></div>
-      <div class="fld"><label>Промо дост.</label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
-      ${it.code?"":`<div class="fld"><label>Наш код</label><input data-k="code" inputmode="numeric" value=""></div>`}
+      ${kind==="comp"?`<div class="fld"><label data-h="comp">Компенсация/бр. <i class="q">?</i></label><input data-k="comp" value="${nv(it.comp)}" disabled></div>`:""}
+      <div class="fld"><label data-h="base">Базова с ДДС <i class="q">?</i></label><input data-k="base" inputmode="decimal" value="${pv(it.base)}"></div>
+      <div class="fld"><label data-h="to">Т.О. % <i class="q">?</i></label><input data-k="to_pct" inputmode="decimal" value="${nv(it.to_pct)}"></div>
+      <div class="fld"><label data-h="reg">Редовна дост. <i class="q">?</i></label><input data-k="reg" inputmode="decimal" value="${pv(it.reg)}"></div>
+      <div class="fld"><label data-h="dto">Д.Т.О. % <i class="q">?</i></label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}"></div>
+      <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
+      ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
     <div class="prices">${fund}</div>
     ${buyer}`}
@@ -251,7 +263,7 @@ async function renderForm(id){
   const ms=it.map(x=>x.margin_best).filter(x=>x!=null);
   const tot=it.reduce((a,x)=>a+(x.funded>0&&x.sales30?x.funded*x.sales30:0),0);
   const reg=[F.region_varna?"Варна":null,F.region_sofia?"София":null].filter(Boolean).join(", ")||"—";
-  app.innerHTML=`<a class="back" href="#">‹ Всички бланки</a>
+  app.innerHTML=`<div class="top"><a class="back" href="#">‹ Всички бланки</a><span class="sp"></span><a class="btn" href="#help">? Помощ</a></div>
   <div><h1>${esc(F.supplier||"Без име на доставчик")}</h1>
    <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
@@ -260,8 +272,8 @@ async function renderForm(id){
     <span><b>Въвеждам цените без ДДС</b><br><span class="muted">системата добавя ДДС по ставката на всеки артикул от Мистрал</span></span></label>`}
   <div class="stats"><div class="stat"><div class="n">${it.length}</div><div class="l">артикула</div></div>
    <div class="stat"><div class="n">${it.filter(x=>x.approved!=null).length}</div><div class="l">с цена</div></div>
-   <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l">среден марж</div></div>
-   <div class="stat"><div class="n">${f(tot,0)} €</div><div class="l">доплащаме*</div></div></div>
+   <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l" data-h="avgmargin">среден марж <i class="q">?</i></div></div>
+   <div class="stat"><div class="n">${f(tot,0)} €</div><div class="l" data-h="funded">доплащаме <i class="q">?</i></div></div></div>
   <div class="card">${it.map(x=>itemHTML(x,F.kind)).join("")}</div>
   <div class="card dec">
     <div class="r"><label class="muted" for="fmt">Формат</label><select id="fmt" ${canDecide()?"":"disabled"}>${["","Единично каре","А5","А4","Брошура"].map(o=>`<option ${o===(F.fmt||"")?"selected":""}>${o}</option>`).join("")}</select>
@@ -369,8 +381,71 @@ function drawArts(){
   $("#top").onclick=()=>{ARTS.slice(0,10).forEach(a=>PICK.add(a.code));drawArts()};
   upd();
 }
+// ---------- помощ: какво е всяко число (пример: Bolgare Мерло от брошура 304) ----------
+const HELP={
+ shelf:["Рафт сега","Цената, на която артикулът се продава в магазина днес. Идва от Мистрал (основната ценова листа).","Bolgare Мерло: 4,20 €"],
+ approved:["Промо рафт","Цената в брошурата - тя е решението на Асен. Пише се с ДДС, както ще е на етикета.","4,20 € → 3,36 €"],
+ off:["Отстъпка %","Колко по-евтино е промо цената от сегашната. Може да пишеш процента вместо цената - системата смята цената сама.","1 − 3,36 ÷ 4,20 = 20%"],
+ margin:["Марж","Колко печелим от всяко евро продажба по време на брошурата: (промо рафт − промо доставна) ÷ промо рафт. Зелено над 22%, жълто 15–22%, червено под 15%.<br><br><b>(сега X%)</b> - маржът днес, без промоция.<br><b>без Д.Т.О.</b> - ако доставчикът не даде отстъпка (най-лошият случай).<br><b>с искането 20%</b> - ако доставчикът приеме исканата от нас цена.","(3,36 − 3,141) ÷ 3,36 = 6,5% без Д.Т.О."],
+ avgmargin:["Среден марж","Средният марж на всички артикули в бланката. Ако доставчикът още не е дал отстъпка, се смята без нея.","4 вина × 6,5% = 6,5%"],
+ funded:["Доплащаме","Колко пари даваме ние от нашия марж: (сегашна цена − промо цена) − отстъпката на доставчика, умножено по продадените бройки за 30 дни в регионите на брошурата.","(4,20 − 3,36) − 0 = 0,84 €/бр. × 21 бр. = 18 €"],
+ need:["Искаме доставна","Каква промо доставна цена да поискаме от доставчика, за да имаме поне 20% марж при одобрената цена на рафта. В скоби е каква Д.Т.О. означава това спрямо редовната му цена.","3,36 × 0,80 = 2,688 € → Д.Т.О. 14,4% от 3,141"],
+ sales:["Продажби 30 д.","Продадени бройки за последните 30 дни - отделно Варна и София. От касовите бонове в MinMaxAI.","Мерло: Варна 21, София 4"],
+ stock:["Наличност","Бройки в магазините в момента и в колко магазина се продава. От MinMaxAI.","116 бр. в 15 магазина"],
+ margin30:["Марж каса","Истинският марж от касата за 30 дни - след всички намаления и акции. Сравни го с маржа в брошурата.","22,4%"],
+ lastpromo:["Последна брошура","Кога е бил в брошура последно, с каква отстъпка и цена. ×2,3 значи, че по време на брошурата се е продавал 2,3 пъти повече на ден, отколкото 14 дни преди нея.","01.10–15.10, −15%, ×2,3"],
+ checks:["Проверки ⚠","Системата сама търси грешки: цена без ДДС, голяма разлика с последната доставка, промо цена под доставната, отстъпка, въведена като цена и т.н. Червеното трябва да се провери, преди да се изпрати.",""],
+ base:["Базова цена с ДДС","Цената от ценоразписа на доставчика - първата цена в неговата бланка.","3,49 €"],
+ to:["Т.О. %","Търговската отстъпка по договор. Редовната доставна = базова − Т.О. Системата я смята сама.","3,49 − 10% = 3,141 €"],
+ reg:["Редовна доставна","Какво плащаме на доставчика нормално, с ДДС. Пише откъде е: доставчик, офис, запомнена или Мистрал (последна доставка). Поправката се запомня за следващата брошура.","3,141 €"],
+ dto:["Д.Т.О. %","Допълнителната отстъпка, която доставчикът дава за брошурата. Промо доставната = редовна − Д.Т.О. Пиши процента - цената се смята сама.","3,141 − 8% = 2,8897 €"],
+ promo:["Промо доставна","Какво плащаме на доставчика през периода на промо цените. Ако я напишеш, системата смята Д.Т.О. сама.","2,8897 €"],
+ comp:["Компенсация/бр.","При бланка за компенсация: колко ни връща доставчикът за всяка продадена бройка. Промо доставната = редовна − компенсация.","0,702 €"],
+ code:["Наш код","Кодът на артикула в Мистрал. Ако системата не го е намерила по баркода, напиши го и тя ще дотегли всичко останало.","14220"],
+};
+function showHelp(k){
+  const h=HELP[k];if(!h)return;
+  let el=$("#sheet");if(!el){el=document.createElement("div");el.id="sheet";document.body.appendChild(el)}
+  el.className="sheet";el.innerHTML=`<h3>${h[0]}</h3><p>${h[1]}</p>${h[2]?`<div class="ex">Пример: ${h[2]}</div>`:""}<p style="margin-top:12px"><button class="btn" id="shx" style="width:100%;justify-content:center">Разбрах</button></p>`;
+  el.hidden=false;$("#shx").onclick=()=>el.hidden=true;
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-h]");
+  if(t&&!e.target.matches("input,button,a")){e.preventDefault();showHelp(t.dataset.h);return}
+  const sh=$("#sheet");if(sh&&!sh.hidden&&!e.target.closest("#sheet"))sh.hidden=true;
+});
+function renderHelp(){
+  const asen=ME&&ME.role==="approver";
+  const dl=keys=>`<dl>${keys.map(k=>`<div><dt>${HELP[k][0]}</dt><dd>${HELP[k][1]}${HELP[k][2]?`<span class="ex">Пример: ${HELP[k][2]}</span>`:""}</dd></div>`).join("")}</dl>`;
+  const forAsen=`<div class="card hdoc"><h2>За Асен - как решаваш</h2><ol>
+     <li>Получаваш съобщение в Telegram и отваряш линка.</li>
+     <li>Гледаш продажбите (Варна/София), наличността и как е вървял в миналата брошура.</li>
+     <li>Пишеш <b>Промо рафт</b> (или % отстъпка). Маржът се смята веднага.</li>
+     <li>Ако маржът е червен - натисни <b>Контраоферта</b> и напиши бележка (напр. „искаме Д.Т.О. 15%“). Системата вече е сметнала каква доставна цена да поискаме.</li>
+     <li>Избираш формат (каре, А5, А4) и натискаш <b>Одобри</b>. Офисът вижда решението веднага.</li></ol>
+     ${dl(["shelf","approved","off","margin","need","funded","sales","stock","margin30","lastpromo","checks"])}</div>`;
+  const forOffice=`<div class="card hdoc"><h2>За офиса - как подготвяш бланка</h2><ol>
+     <li><b>Бланка от доставчик:</b> качи Excel-а (или снимка/PDF). Системата чете всичко сама, намира кодовете, цените на рафта и продажбите.</li>
+     <li><b>Нова бланка от нас:</b> „+ Нова брошура по доставчик“ → избери доставчик (или търси артикул по име, код, баркод) → отметни артикулите → „Създай бланката“.</li>
+     <li>Провери цените на доставчика. Ако имаш цени без ДДС - сложи отметката „Въвеждам цените без ДДС“.</li>
+     <li>Оправи всичко червено ⚠. Асен получава известие сам.</li>
+     <li>След решението на Асен: свали <b>„Бланка 6Б с цените“</b>, прати я на доставчика и натисни <b>„Отбележи изпратена“</b>.</li></ol>
+     ${dl(["base","to","reg","dto","promo","comp","code","checks"])}</div>`;
+  const btns=`<div class="card hdoc"><h2>Бутоните</h2><dl>
+     <div><dt>Бланка 6Б с цените</dt><dd>Нашата бланка (като хартиената) с одобрените цени - това се праща на доставчика.</dd></div>
+     <div><dt>Попълнена оригинална бланка</dt><dd>Excel-ът на доставчика с попълнена колона „Одобрен“.</dd></div>
+     <div><dt>Отговор Excel</dt><dd>Кратка таблица с всички цени и решението - за вътрешна употреба.</dd></div>
+     <div><dt>Оригинал</dt><dd>Файлът, който е пратил доставчикът.</dd></div>
+     <div><dt>Обнови от Мистрал</dt><dd>Дърпа отново кодове, цени на рафта, продажби и наличност.</dd></div>
+     <div><dt>Статуси</dt><dd><b>Чака решение</b> - при Асен. <b>Одобрена</b> / <b>Контраоферта</b> / <b>Отказана</b> - решено. <b>Изпратена</b> - офисът я е пратил на доставчика.</dd></div></dl></div>`;
+  app.innerHTML=`<div class="top"><a class="back" href="javascript:history.back()">‹ Назад</a><span class="sp"></span></div>
+    <h1>Помощ</h1><div class="muted">Навсякъде, където има <i class="q">?</i>, натисни и ще видиш какво е числото.</div>
+    ${asen?forAsen+forOffice:forOffice+forAsen}${btns}`;
+}
+
 async function route(){
   if(!ME){try{ME=await api("/api/me")}catch(e){return}}
+  if(location.hash==="#help"){renderHelp();return}
   if(location.hash==="#new"){try{await renderNew()}catch(e){toast(e.message)}return}
   const m=location.hash.match(/^#f(\d+)/);
   try{m?await renderForm(m[1]):await renderList()}catch(e){if(e.message!=="401")toast(e.message)}
