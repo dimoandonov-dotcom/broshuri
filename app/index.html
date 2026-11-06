@@ -236,7 +236,7 @@ function itemHTML(it,kind){
   const reg=(lbl,v)=>v==null?"":`<span data-h="sales">${lbl} <b>${v}</b> бр.</span>`;
   const asen=ME&&ME.role==="approver";
   const mbox=it.margin!=null
-    ?`<div class="v ${mcls(it.margin)}">${f(it.margin,1)}%</div>`
+    ?`<div class="v ${it.kzp&&it.kzp_ok_margin===false?"m-low":mcls(it.margin)}">${f(it.margin,1)}%</div>${it.kzp&&it.kzp_ok_margin===false?`<div class="k g-bad" style="text-transform:none">КЗП: над регулярния</div>`:""}`
     :it.margin_at_reg!=null
       ?`<div class="v ${mcls(it.margin_at_reg)}" title="при сегашната редовна доставна">${f(it.margin_at_reg,1)}%</div><div class="k" style="text-transform:none">без Д.Т.О. · с искането ${f(it.min_margin,0)}%</div>`
       :`<div class="v">—</div>`;
