@@ -80,15 +80,21 @@ def _info(cur, codes: list[int]) -> dict[int, dict]:
                     WHERE MATERIALCODE IN ({cl}) AND LASTDELIVERYPRICE > 0 AND LASTDELIVERYPRICEWOTAX > 0""")
     best: dict[int, dict] = {}
     tg_rate: dict = {}
+    rates: dict[int, list] = {}
     for r in cur.fetchall():
         code = int(r["code"])
         p, pn = float(r["p"]), float(r["pn"])
         rate = min((0, 9, 20), key=lambda x: abs((p / pn - 1) * 100 - x))
         tg_rate.setdefault(r["tg"], rate)
+        rates.setdefault(code, []).append(rate)
         if code not in best or (r["d"] and (best[code]["d"] is None or r["d"] > best[code]["d"])):
             best[code] = {"d": r["d"], "p": p, "pn": pn, "rate": rate}
     for code, b in best.items():
-        info[code].update(last_delivery=round(b["p"], 4), last_delivery_net=round(b["pn"], 4), vat=b["rate"],
+        # ставката: най-честата ненулева по всички обекти (вътрешни трансфери от склада понякога са без ДДС)
+        nz = [x for x in rates.get(code, []) if x]
+        vat = max(set(nz), key=nz.count) if nz else 0
+        info[code].update(last_delivery=round(b["p"] if b["rate"] or not vat else b["pn"] * (1 + vat / 100), 4),
+                          last_delivery_net=round(b["pn"], 4), vat=vat,
                           last_delivery_date=b["d"].date().isoformat() if b["d"] else None)
     cur.execute(f"""SELECT STORAGEMATERIALCODE AS code, MAX(CODE) AS bc FROM BARCODE WITH (NOLOCK)
                     WHERE STORAGEMATERIALCODE IN ({cl}) AND LEN(CODE) BETWEEN 8 AND 14 GROUP BY STORAGEMATERIALCODE""")

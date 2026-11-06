@@ -10,6 +10,8 @@ from datetime import timedelta
 from sqlalchemy import create_engine, text
 
 _eng = None
+# магазините в София (отделна база на Мистрал) - за делене на продажбите Варна / София
+SOF = "(SELECT id FROM stores WHERE mistral_db_path = 'sofia')"
 
 
 def engine():
