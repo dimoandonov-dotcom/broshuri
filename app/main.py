@@ -338,9 +338,8 @@ def _item_calc(it: dict, kind: str) -> dict:
     k = it.get("kzp")
     if k:
         # КЗП: маржът в промоцията не може да надминава регулярния марж
-        c0 = cost if cost is not None else reg
-        it["kzp_max_price"] = (int(c0 / (1 - it["reg_margin"] / 100) * 100) / 100
-                               if c0 is not None and it["reg_margin"] is not None and it["reg_margin"] < 100 else None)
+        it["kzp_max_price"] = (int(cost / (1 - it["reg_margin"] / 100) * 100 + 1e-6) / 100
+                               if cost is not None and it["reg_margin"] is not None and it["reg_margin"] < 100 else None)
         it["kzp_ok_margin"] = (it["margin"] is None or it["reg_margin"] is None
                                or it["margin"] <= it["reg_margin"] + 0.05)
     it["checks"] = checks(it, kind)
