@@ -84,6 +84,17 @@ h1 span{color:var(--pen)}
 .fld input.auto{border-color:var(--bad);color:var(--bad);font-weight:600}
 .autotag{font-size:.62rem;color:var(--bad);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .save{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.tour-hole{position:fixed;z-index:40;border-radius:12px;box-shadow:0 0 0 4px var(--pen),0 0 0 9999px rgba(20,18,16,.62);pointer-events:none;transition:all .35s cubic-bezier(.3,.9,.3,1)}
+.tour-card{position:fixed;z-index:41;width:min(420px,calc(100vw - 24px));box-sizing:border-box;background:var(--surface);color:var(--fg);border-radius:16px;padding:16px 18px;box-shadow:0 14px 40px rgba(0,0,0,.35);transition:top .35s,left .35s;animation:rise .3s ease}
+.tour-card h3{margin:0 0 6px;font-family:var(--f-d);font-size:1rem}
+.tour-card p{margin:0 0 12px;line-height:1.5;font-size:.93rem}
+.tour-card .tn{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tour-card .dots{min-width:60px}
+.tour-card .dots{flex:1;display:flex;gap:4px}
+.tour-card .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.tour-card .dots i.on{background:var(--pen)}
+.tour-block{position:fixed;inset:0;z-index:39}
+@media (prefers-reduced-motion:reduce){.tour-hole,.tour-card{transition:none;animation:none}}
 .grp{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--pen);font-weight:700;margin-top:2px}
 .mg{margin-left:auto;text-align:right;min-width:80px}
 .mg .v{font-family:var(--f-m);font-weight:600}
@@ -216,7 +227,7 @@ async function renderList(){
       <div class="muted">${x.kind==="comp"?"Компенсация":"Брошура"}${x.brochure_no?" № "+esc(x.brochure_no):""} · ${x.n_items} арт. · ${dt(x.promo_from)}–${dt(x.promo_to)}${x.has_warn?" · ⚠":""}${x.source==="email"?" · имейл":""}</div></div>
       <span class="badge ${STG[x.stage][1]}">${STG[x.stage][0]}</span><span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
     ||`<div class="card muted">Няма бланки тук.</div>`}</div>`;
-  drawPush();setBadge(cnt(asen?"asen":"back"));
+  drawPush().then(()=>maybeTour("list"));setBadge(cnt(asen?"asen":"back"));
   $("#lo").onclick=async()=>{await post("/api/logout",{});ME=null;renderLogin()};
   app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderList()});
   if(isOffice()){
@@ -363,6 +374,7 @@ async function renderForm(id){
   if($("#sent"))$("#sent").onclick=async()=>{await post(`/api/forms/${F.id}/sent`,{});toast("Отбелязана като изпратена");renderForm(F.id)};
   if($("#del")){let armed=false;$("#del").onclick=async e=>{if(!armed){armed=true;e.target.textContent="Сигурен ли си? Натисни пак";return}
     await api(`/api/forms/${F.id}`,{method:"DELETE"});toast("Изтрита");location.hash=""}}
+  maybeTour("form");
 }
 async function saveItem(inp){
   const id=inp.closest(".item").dataset.id, k=inp.dataset.k, v=num(inp.value), it=FORM.items.find(x=>x.id==id);
@@ -505,8 +517,9 @@ function renderHelp(){
      <div><dt>Обнови от Мистрал</dt><dd>Дърпа отново кодове, цени на рафта, продажби и наличност.</dd></div>
      <div><dt>Статуси</dt><dd><b>Чака решение</b> - при Асен. <b>Одобрена</b> / <b>Контраоферта</b> / <b>Отказана</b> - решено. <b>Изпратена</b> - офисът я е пратил на доставчика.</dd></div></dl></div>`;
   app.innerHTML=`<div class="top"><a class="back" href="javascript:history.back()">‹ Назад</a><span class="sp"></span></div>
-    <h1>Помощ</h1><div class="muted">Навсякъде, където има <i class="q">?</i>, натисни и ще видиш какво е числото.</div>
+    <h1>Помощ</h1><button class="btn pri" id="tourgo" style="justify-content:center">▶ Покажи ми как се работи (обиколка)</button><div class="muted">Навсякъде, където има <i class="q">?</i>, натисни и ще видиш какво е числото.</div>
     ${asen?forAsen+forOffice:forOffice+forAsen}${btns}`;
+  $("#tourgo").onclick=()=>{resetTours();location.hash="";};
 }
 
 let KZPREP=null, KZF="all", KZQ="";
@@ -577,6 +590,79 @@ async function drawPush(){
   if($("#pushon"))$("#pushon").onclick=enablePush;
 }
 function setBadge(n){try{n?navigator.setAppBadge&&navigator.setAppBadge(n):navigator.clearAppBadge&&navigator.clearAppBadge()}catch(e){}}
+
+// ---------- интерактивна обиколка ----------
+const TOURS={
+ office:{
+  list:[
+   [".hero","Здравей, Габи 👋","Това е твоето място за брошурите. Ще ти покажа всичко за минута - натискай „Напред“."],
+   ["#pushbox","Известия","Натисни „Включи известия“ и разреши. Така ще разбереш веднага, когато Асен ти върне бланка с цени."],
+   ["#drop","Бланка от доставчик","Влачи тук Excel-а от имейла (или PDF / снимка). Системата сама чете артикулите и цените и добавя кодовете, цените на рафта и продажбите от Мистрал."],
+   ['a[href="#new"]',"Нова бланка от нас","Когато ние предлагаме артикулите: избираш доставчик, отмяташ артикулите и системата прави бланката."],
+   ["#kzpinfo","КЗП","Списъкът на КЗП и справката кои артикули могат да влязат в брошурата. Тук качваш и новия списък, когато се обнови."],
+   [".chips","Етапите","Всяка бланка минава: Подготовка → При Асен → Върнати от Асен → Изпратени. Филтрите показват коя къде е."],
+   [".list .row-f","Отвори бланка","Натисни бланка - вътре ще ти покажа как се попълва."]],
+  form:[
+   ["#rdy","Бланката се подготвя","Всичко, което пишеш, се записва веднага (излиза „Записано ✓“). Като провериш, натискаш този бутон и Асен получава известие."],
+   ["#net","Цени без ДДС?","Ако преписваш от фактура без ДДС - сложи отметката. Системата сама добавя ДДС по ставката на всеки артикул."],
+   ['.item [data-k="base"]',"Цените на доставчика","Базова цена и Т.О. % от офертата. Редовната доставна се смята сама: базова − Т.О."],
+   ['.item [data-k="dto_pct"]',"Д.Т.О.","Отстъпката за брошурата. 0 = фирмата няма Д.Т.О. Празно = системата сама ще я сметне, след като Асен даде цената."],
+   [".chk","Червено = провери","Системата сама хваща грешки: цена без ДДС, отстъпка над 40%, липсващ код, нарушение на КЗП. Оправи червеното преди изпращане."],
+   ['.item [data-k="approved"]',"Цената на Асен","Промо цената на рафта пише само Асен. При теб полето е заключено."],
+   ["[data-h]","Не знаеш какво е число?","Натисни малкото ? до всяко поле - излиза обяснение с пример."],
+   ['a[href$="blank.xlsx"]',"Към доставчика","Когато Асен върне бланката: сваляш „Бланка 6Б с цените“, пращаш я по имейл и натискаш „Отбележи изпратена“. Готово! 🎉"]]},
+ approver:{
+  list:[
+   [".hero","Здравей, Асен 👋","Тук идват бланките, на които трябва да сложиш цени. Ще ти покажа за минута."],
+   ["#pushbox","Известия","Включи известията - ще ти излиза съобщение на телефона за всяка нова бланка."],
+   [".chips","За мен","„За мен“ са бланките, които Габи е подготвила и чакат твоите цени."],
+   [".list .row-f","Отвори бланка","Натисни бланка, за да видиш как се слагат цените."]],
+  form:[
+   ['.item [data-k="approved"]',"Промо цената","Пишеш цената на рафта в брошурата. Или процент в „Отстъпка %“ - цената се смята сама."],
+   [".item .mg","Марж","Сметнат веднага. Зелено над 22%, жълто 15-22%, червено под 15%. При КЗП не може да е над регулярния."],
+   ['[data-h="need"]',"Какво искаме от доставчика","Каква доставна цена ни трябва за 20% марж - тя отива автоматично в бланката към доставчика."],
+   ["[data-st]","Решение","Одобри, Контраоферта или Откажи. Може и бележка към доставчика."],
+   ["#ret","Запис","Накрая натискаш тук - бланката се връща при Габи с твоите цени и тя я праща. Готово! 🎉"]]}
+};
+function tourKey(part){return `br_tour_${ME&&ME.user}_${part}`}
+function maybeTour(part){
+  if(!ME)return;const role=ME.role==="approver"?"approver":"office";
+  if(part==="form"&&!(TOURS[role].form))return;
+  let seen=false;try{seen=localStorage.getItem(tourKey(part))==="1"}catch(e){}
+  if(!seen)setTimeout(()=>runTour(part),500);
+}
+function runTour(part){
+  const role=ME.role==="approver"?"approver":"office";
+  const steps=(TOURS[role][part]||[]).filter(([sel])=>{const e=document.querySelector(sel);return e&&e.offsetParent!==null||sel==="#net"&&document.querySelector(sel)});
+  if(!steps.length)return;
+  let i=0;
+  const blk=document.createElement("div");blk.className="tour-block";
+  const hole=document.createElement("div");hole.className="tour-hole";
+  const card=document.createElement("div");card.className="tour-card";card.setAttribute("role","dialog");
+  document.body.append(blk,hole,card);
+  const end=()=>{blk.remove();hole.remove();card.remove();removeEventListener("resize",place);try{localStorage.setItem(tourKey(part),"1")}catch(e){}};
+  function place(){
+    const [sel,h,t]=steps[i];let el=document.querySelector(sel);
+    if(sel==="#net"||sel==="#kzpinfo")el=el.closest("label,.card")||el;
+    if(sel.includes("[data-k=")||sel===".item .mg")el=el.closest(".fld,.mg")||el;
+    el.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth"});
+    setTimeout(()=>{
+      const r=el.getBoundingClientRect(),pad=6;
+      Object.assign(hole.style,{top:r.top-pad+"px",left:r.left-pad+"px",width:r.width+pad*2+"px",height:r.height+pad*2+"px"});
+      card.innerHTML=`<h3>${h}</h3><p>${t}</p><div class="tn"><div class="dots">${steps.map((_,k)=>`<i class="${k===i?"on":""}"></i>`).join("")}</div>
+        <button class="btn" id="tsk">Пропусни</button>${i?`<button class="btn" id="tbk">Назад</button>`:""}<button class="btn pri" id="tnx">${i===steps.length-1?"Разбрах":"Напред"}</button></div>`;
+      const ch=card.offsetHeight,cw=card.offsetWidth,vh=innerHeight,vw=innerWidth;
+      let top=r.bottom+14;if(top+ch>vh-10)top=r.top-ch-14;if(top<10)top=Math.max(10,vh-ch-16);
+      const left=Math.min(Math.max(10,r.left),vw-cw-10);
+      Object.assign(card.style,{top:top+"px",left:left+"px"});
+      $("#tnx").onclick=()=>{if(i<steps.length-1){i++;place()}else end()};
+      $("#tsk").onclick=end;if($("#tbk"))$("#tbk").onclick=()=>{i--;place()};
+      $("#tnx").focus();
+    },380);
+  }
+  addEventListener("resize",place);place();
+}
+function resetTours(){try{["list","form"].forEach(p=>localStorage.removeItem(tourKey(p)))}catch(e){}}
 
 async function route(){
   if(!ME){try{ME=await api("/api/me")}catch(e){return}}
