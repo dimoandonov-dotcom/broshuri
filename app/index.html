@@ -75,6 +75,9 @@ h1 span{color:var(--pen)}
 .kzptag{background:var(--kzp);color:#fff;font-weight:800;letter-spacing:.06em;font-size:.72rem;padding:3px 9px;border-radius:6px}
 .is-blocked .kzptag{background:var(--bad)}
 .kzpmark{display:inline-block;background:var(--kzp);color:#fff;font-weight:800;font-size:.66rem;padding:1px 6px;border-radius:5px;margin-right:6px;vertical-align:1px}
+.fld input.auto{border-color:var(--bad);color:var(--bad);font-weight:600}
+.autotag{font-size:.62rem;color:var(--bad);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.save{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.18)}
 .grp{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--pen);font-weight:700;margin-top:2px}
 .mg{margin-left:auto;text-align:right;min-width:80px}
 .mg .v{font-family:var(--f-m);font-weight:600}
@@ -136,7 +139,7 @@ textarea{width:100%;min-height:44px}
 <script>
 const $=s=>document.querySelector(s), app=$("#app");
 const ST={pending:["Чака решение","b-pending"],approved:["Одобрена","b-approved"],counter:["Контраоферта","b-counter"],rejected:["Отказана","b-rejected"]};
-let ME=null, FILTER="pending", FORM=null;
+let ME=null, FILTER=null, FORM=null;
 let NET=false;try{NET=localStorage.getItem("br_net")==="1"}catch(e){}
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const f=(n,d=2)=>n==null||isNaN(n)?"—":Number(n).toFixed(d).replace(".",",");
@@ -184,8 +187,11 @@ async function renderLogin(msg){
 
 async function renderList(){
   const [forms]=await Promise.all([api("/api/forms"),today()]);
-  const cnt=k=>forms.filter(x=>k==="all"||x.status===k).length;
-  const shown=forms.filter(x=>FILTER==="all"||x.status===FILTER);
+  const asen=ME.role==="approver";
+  const cnt=k=>forms.filter(x=>k==="all"||x.stage===k).length;
+  if(!FILTER)FILTER=asen?"asen":(cnt("back")?"back":"prep");
+  const shown=forms.filter(x=>FILTER==="all"||x.stage===FILTER);
+  const STG={prep:["Подготвя се","b-counter"],asen:["При Асен","b-pending"],back:["Върната от Асен","b-approved"],sent:["Изпратена","b-sent"]};
   app.innerHTML=`<div class="top"><h1>Брошури <span>300</span></h1><span class="sp"></span><a class="btn" href="#help">? Помощ</a><button class="btn" id="lo">Изход</button></div>
   ${heroHTML()}
   ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
@@ -195,12 +201,13 @@ async function renderList(){
      <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:2px solid var(--kzp);background:var(--kzp-soft)">
        <span class="kzptag">КЗП</span><span id="kzpinfo" class="muted" style="flex:1;min-width:0">Списък КЗП…</span>
        <a class="btn pri" href="#kzp">Справка КЗП</a><label class="btn"><input type="file" id="kzpf" accept=".xlsx" hidden>Качи нов списък</label></div>`:`<a class="btn" href="#kzp" style="justify-content:center">Справка КЗП</a>`}
-  <div class="chips">${[["pending","Чакат"],["counter","Контраоферта"],["approved","Одобрени"],["rejected","Отказани"],["all","Всички"]]
+  <div class="chips">${(asen?[["asen","За мен"],["back","Върнати на офиса"],["prep","При офиса"],["sent","Изпратени"],["all","Всички"]]
+      :[["prep","Подготовка"],["asen","При Асен"],["back","Върнати от Асен"],["sent","Изпратени"],["all","Всички"]])
     .map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${FILTER===k}">${l} · ${cnt(k)}</button>`).join("")}</div>
   <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
       <div class="nm">${esc(x.supplier||"Без име на доставчик")}</div>
       <div class="muted">${x.kind==="comp"?"Компенсация":"Брошура"}${x.brochure_no?" № "+esc(x.brochure_no):""} · ${x.n_items} арт. · ${dt(x.promo_from)}–${dt(x.promo_to)}${x.has_warn?" · ⚠":""}${x.source==="email"?" · имейл":""}</div></div>
-      ${x.sent_at?`<span class="badge b-sent">Изпратена</span>`:""}${x.status==="pending"?(x.ready_at?`<span class="badge b-approved">При Асен</span>`:`<span class="badge b-counter">Подготвя се</span>`):""}<span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
+      <span class="badge ${STG[x.stage][1]}">${STG[x.stage][0]}</span><span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
     ||`<div class="card muted">Няма бланки тук.</div>`}</div>`;
   $("#lo").onclick=async()=>{await post("/api/logout",{});ME=null;renderLogin()};
   app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderList()});
@@ -269,7 +276,7 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="base">Базова с ДДС <i class="q">?</i></label><input data-k="base" inputmode="decimal" value="${pv(it.base)}"></div>
       <div class="fld"><label data-h="to">Т.О. % <i class="q">?</i></label><input data-k="to_pct" inputmode="decimal" value="${nv(it.to_pct)}"></div>
       <div class="fld"><label data-h="reg">Редовна дост. <i class="q">?</i></label><input data-k="reg" inputmode="decimal" value="${pv(it.reg)}"></div>
-      <div class="fld"><label data-h="dto">Д.Т.О. % <i class="q">?</i></label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}"></div>
+      <div class="fld"><label data-h="dto">Д.Т.О. % <i class="q">?</i></label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}" class="${it.dto_src==="авто"?"auto":""}" title="${it.dto_src==="авто"?"Сметната автоматично - поправи, ако трябва":""}">${it.dto_src==="авто"?`<span class="autotag">авто</span>`:""}</div>
       <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
       ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
@@ -311,10 +318,13 @@ async function renderForm(id){
       ${F.wanted_format?`<span class="muted">Искат: ${esc(F.wanted_format)}</span>`:""}</div>
     <textarea id="note" placeholder="Бележка към доставчика (напр. искаме по-висока Д.Т.О.)" ${canDecide()?"":"disabled"}>${esc(F.note||"")}</textarea>
     ${canDecide()?`<div class="r">${[["approved","Одобри","a"],["counter","Контраоферта","c"],["rejected","Откажи","x"]]
-      .map(([k,l,c])=>`<button class="btn ${c}" data-st="${k}" aria-pressed="${F.status===k}">${l}</button>`).join("")}</div>`
+      .map(([k,l,c])=>`<button class="btn ${c}" data-st="${k}" aria-pressed="${F.status===k}">${l}</button>`).join("")}</div>
+      <div class="muted">Цените се пазят веднага. Като свършиш, натисни „Запис и връщане към Габи“ - празните Д.Т.О. се попълват автоматично (за ${f(it[0]?it[0].min_margin:20,0)}% марж, при КЗП - не над регулярния), а Габи праща бланката на доставчика.</div>
+      ${F.returned_at&&(!F.ready_at||F.returned_at>=F.ready_at)?`<div class="muted">Върната към офиса ${new Date(F.returned_at).toLocaleString("bg-BG",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})}</div>`:""}`
       :`<div><span class="badge ${ST[F.status][1]}">${ST[F.status][0]}</span> ${F.decided_by?`<span class="muted">от ${esc(F.decided_by)}</span>`:""}</div>`}
   </div>
-  <div class="card dec"><div class="r">
+  ${canDecide()&&ME.role==="approver"?`<button class="btn pri save" id="ret" style="justify-content:center;font-size:1rem;padding:14px">Запис и връщане към Габи</button>`:""}
+  ${ME.role==="approver"?"":`<div class="card dec"><div class="r">
     <a class="btn pri" href="/api/forms/${F.id}/blank.xlsx">Бланка 6Б с цените</a>
     <a class="btn" href="/api/forms/${F.id}/answer.xlsx">Отговор Excel</a>
     ${(F.file_name||"").toLowerCase().match(/\.xls[xm]$/)?`<a class="btn" href="/api/forms/${F.id}/filled.xlsx">Попълнена оригинална бланка</a>`:""}
@@ -322,8 +332,9 @@ async function renderForm(id){
     <button class="btn" id="rf">Обнови от Мистрал</button>
     ${isOffice()?(F.sent_at?`<span class="badge b-sent">Изпратена ${dt(F.sent_at)}</span>`:`<button class="btn" id="sent" ${F.status==="pending"?"disabled":""}>Отбележи изпратена</button>`):""}
     ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
-  </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 15 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
+  </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 15 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`}`;
   app.querySelectorAll(".item input[data-k]").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  if($("#ret"))$("#ret").onclick=async()=>{$("#ret").disabled=true;try{await post(`/api/forms/${F.id}/return`,{});toast("Записано и върнато към Габи ✓");FILTER=null;location.hash=""}catch(e){toast(e.message);$("#ret").disabled=false}};
   if($("#rdy"))$("#rdy").onclick=async()=>{$("#rdy").disabled=true;try{await post(`/api/forms/${F.id}/ready`,{});toast("Изпратена на Асен ✓");renderForm(F.id)}catch(e){toast(e.message);$("#rdy").disabled=false}};
   if($("#supn"))$("#supn").onchange=async()=>{await post(`/api/forms/${F.id}`,{supplier:$("#supn").value});toast("Доставчикът е записан")};
   app.querySelectorAll("[data-find]").forEach(inp=>{let t=null;inp.oninput=()=>{clearTimeout(t);const q=inp.value.trim(),box=$("#fh-"+inp.dataset.find);
@@ -467,7 +478,8 @@ function renderHelp(){
      <li>Гледаш продажбите (Варна/София), наличността и как е вървял в миналата брошура.</li>
      <li>Пишеш <b>Промо рафт</b> (или % отстъпка). Маржът се смята веднага.</li>
      <li>Ако маржът е червен - натисни <b>Контраоферта</b> и напиши бележка (напр. „искаме Д.Т.О. 15%“). Системата вече е сметнала каква доставна цена да поискаме.</li>
-     <li>Избираш формат (каре, А5, А4) и натискаш <b>Одобри</b>. Офисът вижда решението веднага.</li></ol>
+     <li>Избираш формат (каре, А5, А4) и <b>Одобри</b> / <b>Контраоферта</b> / <b>Откажи</b>.</li>
+     <li>Натискаш <b>„Запис и връщане към Габи“</b>. Празните Д.Т.О. се попълват автоматично (в червено, „авто“), а Габи ги проверява и праща бланката на доставчика.</li></ol>
      ${dl(["shelf","approved","off","margin","need","funded","sales","stock","margin30","lastpromo","checks"])}</div>`;
   const forOffice=`<div class="card hdoc"><h2>За офиса - как подготвяш бланка</h2><ol>
      <li><b>Бланка от доставчик:</b> качи Excel-а (или снимка/PDF). Системата чете всичко сама, намира кодовете, цените на рафта и продажбите.</li>

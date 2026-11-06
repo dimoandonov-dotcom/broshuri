@@ -389,7 +389,10 @@ def checks(it: dict, kind: str) -> list[str]:
 
 
 SUMMARY = """SELECT f.id, f.supplier, f.kind, f.brochure_no, f.promo_from, f.promo_to, f.status, f.source,
-    f.created_at, f.decided_by, f.decided_at, f.sent_at, f.ready_at, f.warnings IS NOT NULL AND f.warnings <> '' AS has_warn,
+    f.created_at, f.decided_by, f.decided_at, f.sent_at, f.ready_at, f.returned_at,
+    CASE WHEN f.sent_at IS NOT NULL THEN 'sent'
+         WHEN f.returned_at IS NOT NULL AND (f.ready_at IS NULL OR f.returned_at >= f.ready_at) THEN 'back'
+         WHEN f.ready_at IS NOT NULL THEN 'asen' ELSE 'prep' END AS stage, f.warnings IS NOT NULL AND f.warnings <> '' AS has_warn,
     COUNT(i.id) AS n_items, COUNT(i.approved) AS n_approved
   FROM forms f LEFT JOIN items i ON i.form_id = f.id"""
 
@@ -502,7 +505,8 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
         elif v["dto_pct"] is not None and v["reg"] is not None:
             v["promo"] = round(v["reg"] * (1 - v["dto_pct"] / 100), 4)
         db.q("""UPDATE items SET base=:base, to_pct=:to_pct, reg=:reg, dto_pct=:dto_pct, promo=:promo,
-                reg_src='офис' WHERE id=:id""", id=iid, **v)
+                reg_src='офис', dto_src=CASE WHEN :dc THEN 'офис' ELSE dto_src END WHERE id=:id""",
+             id=iid, dc=("dto_pct" in prices or "promo" in prices), **v)
         row = db.one("""SELECT f.supplier, i.code FROM items i JOIN forms f ON f.id=i.form_id WHERE i.id=:id""", id=iid)
         remember_reg(row["supplier"], row["code"], v["reg"], "поправена", user["user"], v["base"], v["to_pct"])
     if p.code is not None:
@@ -536,6 +540,28 @@ def mark_ready(fid: int, user: dict = Depends(need("office"))):
     extras.telegram(f"Брошура за цени: {f['supplier'] or 'доставчик'} - {len(f['items'])} арт."
                     + (f", {kz} от КЗП" if kz else "") + (f", {n_chk} за проверка" if n_chk else "")
                     + f"\nПодготви: {user['user']}\n{url}")
+    return get_form(fid, user)
+
+
+@app.post("/api/forms/{fid}/return")
+def return_to_office(fid: int, user: dict = Depends(need("approver"))):
+    """Асен натиска „Запис“: цените му са записани, празните Д.Т.О. се попълват автоматично
+    (за 20% марж, при КЗП - не над регулярния марж) и бланката се връща при офиса за изпращане."""
+    f = get_form(fid, user)
+    for it in f["items"]:
+        if it.get("dto_pct") is not None or it.get("approved") is None or not it.get("reg") or f["kind"] == "comp":
+            continue
+        reg, app_ = float(it["reg"]), float(it["approved"])
+        target = MIN_MARGIN
+        if it.get("kzp") and it.get("reg_margin") is not None:
+            target = min(target, float(it["reg_margin"]))
+        need = app_ * (1 - target / 100)
+        dto = max(0.0, round((1 - need / reg) * 100, 1))
+        db.q("UPDATE items SET dto_pct=:d, promo=:p, dto_src='авто' WHERE id=:id",
+             d=dto, p=round(reg * (1 - dto / 100), 4), id=it["id"])
+    st = f["status"] if f["status"] != "pending" else "approved"
+    db.q("""UPDATE forms SET status=:s, decided_by=COALESCE(decided_by, :u), decided_at=COALESCE(decided_at, now()),
+            returned_at=now(), returned_by=:u WHERE id=:id""", s=st, u=user["user"], id=fid)
     return get_form(fid, user)
 
 

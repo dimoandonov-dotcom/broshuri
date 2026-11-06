@@ -296,6 +296,8 @@ def blank_xlsx(form: dict, items: list[dict]) -> bytes:
             appr = (f"{app_:.2f} €".replace(".", ",") + (f"  (-{off}%)" if off else "")) if app_ else None
             dto, promo = n(it.get("dto_pct")), n(it.get("promo"))
             req = office and dto is None and it.get("need_delivery") is not None
+            auto = it.get("dto_src") == "авто"
+            asked = asked or auto
             if req:
                 dto, promo, asked = it.get("need_dto"), it.get("need_delivery"), True
             vals = [i + 1, it.get("saft"), it.get("m_name") or it["name"], it.get("barcode"), n(it.get("base")),
@@ -318,7 +320,7 @@ def blank_xlsx(form: dict, items: list[dict]) -> bytes:
             ws.cell(r, j).number_format = "0.0000"
         for j in (6, 8) if not comp else (6,):
             ws.cell(r, j).number_format = "0.00%"
-        if it and not comp and office and it.get("dto_pct") is None and it.get("need_delivery") is not None:
+        if it and not comp and (it.get("dto_src") == "авто" or (office and it.get("dto_pct") is None and it.get("need_delivery") is not None)):
             for j in (8, 9):
                 ws.cell(r, j).font = F(size=9, bold=True, italic=True, color="C0193F")
         ws.row_dimensions[r].height = 18
