@@ -511,6 +511,9 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
 @app.post("/api/forms/{fid}/refresh")
 async def refresh(fid: int, user: dict = Depends(me)):
     notes = await run_in_threadpool(enrich_form, fid)
+    w = (db.one("SELECT warnings FROM forms WHERE id=:f", f=fid) or {}).get("warnings") or ""
+    w = "\n".join(x for x in w.split("\n") if not x.startswith(("MinMaxAI:", "Мистрал ")))
+    db.q("UPDATE forms SET warnings=:w WHERE id=:f", w="\n".join(filter(None, [w, *notes])), f=fid)
     f = get_form(fid, user)
     f["notes"] = notes
     return f
