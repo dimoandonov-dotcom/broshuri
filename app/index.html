@@ -258,7 +258,7 @@ function itemHTML(it,kind){
   return `<div class="item${k?" is-kzp":""}${blocked?" is-blocked":""}" data-id="${it.id}">
     ${kz}<div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
-    <div class="prices">${reg("Продажби 30 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span data-h="stock">Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
+    <div class="prices">${reg("Продажби 15 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span data-h="stock">Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
       ${it.margin30!=null?`<span data-h="margin30">Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
       ${it.last_promo?`<span data-h="lastpromo">Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
     ${it.checks&&it.checks.length?`<div class="chk" data-h="checks">${it.checks.map(c=>`<div>⚠ ${esc(c)}</div>`).join("")}</div>`:""}
@@ -318,14 +318,14 @@ async function renderForm(id){
     <button class="btn" id="rf">Обнови от Мистрал</button>
     ${isOffice()?(F.sent_at?`<span class="badge b-sent">Изпратена ${dt(F.sent_at)}</span>`:`<button class="btn" id="sent" ${F.status==="pending"?"disabled":""}>Отбележи изпратена</button>`):""}
     ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
-  </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 30 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
+  </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 15 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
   app.querySelectorAll(".item input[data-k]").forEach(inp=>inp.onchange=()=>saveItem(inp));
   if($("#supn"))$("#supn").onchange=async()=>{await post(`/api/forms/${F.id}`,{supplier:$("#supn").value});toast("Доставчикът е записан")};
   app.querySelectorAll("[data-find]").forEach(inp=>{let t=null;inp.oninput=()=>{clearTimeout(t);const q=inp.value.trim(),box=$("#fh-"+inp.dataset.find);
     if(q.length<2){box.innerHTML="";return}
     t=setTimeout(async()=>{const r=await api("/api/articles/search?q="+encodeURIComponent(q));
       box.innerHTML=r.length?r.slice(0,8).map(a=>`<button type="button" class="hit" data-code="${a.code}"><div style="flex:1;min-width:0"><div class="it-n">${esc(a.name)}</div>
-        <div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./30 д.</span><span>${esc(a.supplier||"")}</span></div></div><span class="badge b-approved">Това е</span></button>`).join("")
+        <div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./15 д.</span><span>${esc(a.supplier||"")}</span></div></div><span class="badge b-approved">Това е</span></button>`).join("")
         :`<div class="muted">Няма такъв артикул в Мистрал.</div>`;
       box.querySelectorAll("[data-code]").forEach(b=>b.onclick=async()=>{toast("Зареждам от Мистрал…");
         try{FORM=await post("/api/items/"+inp.dataset.find,{code:+b.dataset.code});const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y);toast("Кодът е записан")}catch(e){toast(e.message)}});
@@ -388,7 +388,7 @@ async function renderNew(){
       const r=await api("/api/articles/search?q="+encodeURIComponent(QRY.trim()));
       $("#hits").innerHTML=r.length?`<div class="muted" style="padding-top:8px">${ARTS.length?"Няма го при този доставчик. Намерих го тук:":"Резултати:"}</div>`+
         r.map(a=>`<button type="button" class="hit" data-s="${esc(a.supplier)}" data-c="${a.code}"><div style="flex:1;min-width:0">
-          <div class="it-n">${esc(a.name)}</div><div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./30 д.</span><span>${esc(a.supplier||"без доставчик")}</span></div></div>
+          <div class="it-n">${esc(a.name)}</div><div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./15 д.</span><span>${esc(a.supplier||"без доставчик")}</span></div></div>
           <span class="badge b-pending">Избери</span></button>`).join(""):`<div class="muted" style="padding-top:8px">Няма такъв артикул.</div>`;
       $("#hits").querySelectorAll(".hit").forEach(b=>b.onclick=()=>{if(!b.dataset.s){toast("Артикулът няма доставчик в MinMaxAI");return}
         QRY="";$("#q").value="";$("#hits").innerHTML="";loadSup(b.dataset.s,+b.dataset.c);toast("Избран е доставчикът и артикулът")});
@@ -412,7 +412,7 @@ function drawArts(){
    ${list.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
       <input type="checkbox" data-c="${a.code}" ${PICK.has(a.code)?"checked":""} style="width:20px;height:20px">
       <div style="flex:1;min-width:0"><div class="it-n">${KZP&&KZP.has(a.code)?`<span class="kzpmark">КЗП</span>`:""}${esc(a.name)}</div>
-      <div class="prices"><span>Варна <b>${a.varna??a.sales30}</b></span><span>София <b>${a.sofia??0}</b> бр./30 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
+      <div class="prices"><span>Варна <b>${a.varna??a.sales30}</b></span><span>София <b>${a.sofia??0}</b> бр./15 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
       ${a.last_promo?`<span>брошура ${esc(a.last_promo)}${a.uplift?` ×${f(a.uplift,1)}`:""}</span>`:""}<span class="code">${a.code}</span></div></div></label>`).join("")}</div>`;
   const upd=()=>{$("#cnt").textContent=PICK.size?`избрани ${PICK.size}`:"";$("#mk").disabled=!PICK.size};
   box.querySelectorAll("[data-c]").forEach(cb=>cb.onchange=()=>{const c=+cb.dataset.c;cb.checked?PICK.add(c):PICK.delete(c);upd()});
@@ -427,11 +427,11 @@ const HELP={
  off:["Отстъпка %","Колко по-евтино е промо цената от сегашната. Може да пишеш процента вместо цената - системата смята цената сама.","1 − 3,36 ÷ 4,20 = 20%"],
  margin:["Марж","Колко печелим от всяко евро продажба по време на брошурата: (промо рафт − промо доставна) ÷ промо рафт. Зелено над 22%, жълто 15–22%, червено под 15%.<br><br><b>(сега X%)</b> - маржът днес, без промоция.<br><b>без Д.Т.О.</b> - ако доставчикът не даде отстъпка (най-лошият случай).<br><b>с искането 20%</b> - ако доставчикът приеме исканата от нас цена.","(3,36 − 3,141) ÷ 3,36 = 6,5% без Д.Т.О."],
  avgmargin:["Среден марж","Средният марж на всички артикули в бланката. Ако доставчикът още не е дал отстъпка, се смята без нея.","4 вина × 6,5% = 6,5%"],
- funded:["Доплащаме","Колко пари даваме ние от нашия марж: (сегашна цена − промо цена) − отстъпката на доставчика, умножено по продадените бройки за 30 дни в регионите на брошурата.","(4,20 − 3,36) − 0 = 0,84 €/бр. × 21 бр. = 18 €"],
+ funded:["Доплащаме","Колко пари даваме ние от нашия марж: (сегашна цена − промо цена) − отстъпката на доставчика, умножено по продадените бройки за 15 дни в регионите на брошурата.","(4,20 − 3,36) − 0 = 0,84 €/бр. × 21 бр. = 18 €"],
  need:["Искаме доставна","Каква промо доставна цена да поискаме от доставчика, за да имаме поне 20% марж при одобрената цена на рафта. В скоби е каква Д.Т.О. означава това спрямо редовната му цена.","3,36 × 0,80 = 2,688 € → Д.Т.О. 14,4% от 3,141"],
- sales:["Продажби 30 д.","Продадени бройки за последните 30 дни - отделно Варна и София. От касовите бонове в MinMaxAI.","Мерло: Варна 21, София 4"],
+ sales:["Продажби 15 д.","Продадени бройки за последните 15 дни - отделно Варна и София. От касовите бонове в MinMaxAI.","Мерло: Варна 21, София 4"],
  stock:["Наличност","Бройки в магазините в момента и в колко магазина се продава. От MinMaxAI.","116 бр. в 15 магазина"],
- margin30:["Марж каса","Истинският марж от касата за 30 дни - след всички намаления и акции. Сравни го с маржа в брошурата.","22,4%"],
+ margin30:["Марж каса","Истинският марж от касата за 15 дни - след всички намаления и акции. Сравни го с маржа в брошурата.","22,4%"],
  lastpromo:["Последна брошура","Кога е бил в брошура последно, с каква отстъпка и цена. ×2,3 значи, че по време на брошурата се е продавал 2,3 пъти повече на ден, отколкото 14 дни преди нея.","01.10–15.10, −15%, ×2,3"],
  checks:["Проверки ⚠","Системата сама търси грешки: цена без ДДС, голяма разлика с последната доставка, промо цена под доставната, отстъпка, въведена като цена и т.н. Червеното трябва да се провери, преди да се изпрати.",""],
  base:["Базова цена с ДДС","Цената от ценоразписа на доставчика - първата цена в неговата бланка.","3,49 €"],
@@ -509,7 +509,7 @@ function drawKzp(){
      return h+`<div class="item${x.blocked?" is-blocked":" is-kzp"}" style="margin:6px 0">
        <div class="kzpbar"><span class="kzptag">КЗП</span>${x.blocked?`<b class="g-bad">не може · свободен от ${fd(x.free_from)}</b>`:`<b class="g-ok">може в брошурата</b>`}${x.perishable?`<span>малотраен · 15 дни</span>`:""}</div>
        <div><div class="it-n">${esc(x.name)}</div><div class="code"><b>${x.code}</b>${x.firm?` · ${esc(x.firm)}`:""}</div></div>
-       <div class="prices">${x.sales30!=null?`<span>Продажби 30 д. <b>${x.sales30}</b></span>`:""}${x.margin30!=null?`<span>Марж каса <b>${f(x.margin30,1)}%</b></span>`:""}${x.stock!=null?`<span>Наличност <b>${x.stock}</b></span>`:""}</div>
+       <div class="prices">${x.sales30!=null?`<span>Продажби 15 д. <b>${x.sales30}</b></span>`:""}${x.margin30!=null?`<span>Марж каса <b>${f(x.margin30,1)}%</b></span>`:""}${x.stock!=null?`<span>Наличност <b>${x.stock}</b></span>`:""}</div>
        ${x.activations.length?`<div class="prices">${x.activations.map(a=>`<span class="g-bad">Активация ${fd(a.start)}–${fd(a.end)}${a.discount?` (−${f(a.discount,0)}%)`:""}${a.price?` ${f(a.price)} €`:""}</span>`).join("")}</div>`:""}
      </div>`}).join("")||`<div class="muted">Няма такива артикули.</div>`}</div>`;
   $("#kd").onchange=()=>renderKzp($("#kd").value);

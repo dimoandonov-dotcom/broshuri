@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 SOFIA_TZ = ZoneInfo("Europe/Sofia")
-SALES_DAYS = int(os.getenv("SALES_DAYS", "30"))
+SALES_DAYS = int(os.getenv("SALES_DAYS", "15"))
 
 
 def regions() -> list[str]:

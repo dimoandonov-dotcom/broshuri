@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 
 _eng = None
 # магазините в София (отделна база на Мистрал) - за делене на продажбите Варна / София
+SALES_DAYS = int(__import__("os").getenv("SALES_DAYS", "15"))  # период за продажбите и маржа от касата
 SOF = "(SELECT id FROM stores WHERE mistral_db_path = 'sofia')"
 
 
@@ -40,7 +41,7 @@ def info(codes: list[int]) -> tuple[dict[int, dict], list[str]]:
                     SELECT code, SUM(qty), SUM(qty) FILTER (WHERE store_id IN {SOF}),
                            SUM(rev), SUM(cost), COUNT(DISTINCT store_id) FILTER (WHERE qty > 0)
                     FROM sa_sales WHERE day > :d AND code = ANY(:c) GROUP BY code"""),
-                    {"d": last - timedelta(days=30), "c": codes}):
+                    {"d": last - timedelta(days=SALES_DAYS), "c": codes}):
                 o = out[code]
                 o["mm_sales30"] = int(round(float(q or 0)))
                 o["mm_sofia"] = int(round(float(qs or 0)))
@@ -102,7 +103,7 @@ def articles(supplier: str) -> list[dict]:
                    COALESCE(SUM(s.qty) FILTER (WHERE s.store_id IN (SELECT id FROM stores WHERE mistral_db_path = 'sofia')), 0) AS sofia
             FROM sa_articles a LEFT JOIN sa_sales s ON s.code = a.code AND s.day > :d
             WHERE a.supplier = :s GROUP BY a.code, a.name, a.grp
-            ORDER BY COALESCE(SUM(s.qty), 0) DESC"""), {"s": supplier, "d": last - timedelta(days=30)})]
+            ORDER BY COALESCE(SUM(s.qty), 0) DESC"""), {"s": supplier, "d": last - timedelta(days=SALES_DAYS)})]
     out = []
     for r in rows:
         rev = float(r["rev"] or 0)
@@ -156,7 +157,7 @@ def search(q: str, supplier: str | None = None, limit: int = 40) -> list[dict]:
         params["sup"] = supplier
     with eng.connect() as c:
         last = c.execute(text("SELECT MAX(day) FROM sa_sales")).scalar()
-        params["d"] = last - timedelta(days=30)
+        params["d"] = last - timedelta(days=SALES_DAYS)
         return [{"code": r[0], "name": r[1], "supplier": r[2] or "", "sales30": int(round(float(r[3] or 0)))}
                 for r in c.execute(text(f"""
                     SELECT a.code, a.name, a.supplier, COALESCE(SUM(s.qty), 0) AS q
