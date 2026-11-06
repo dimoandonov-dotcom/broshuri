@@ -194,7 +194,7 @@ async function renderList(){
      <a class="btn pri" href="#new" style="justify-content:center">+ Нова брошура по доставчик</a>
      <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:2px solid var(--kzp);background:var(--kzp-soft)">
        <span class="kzptag">КЗП</span><span id="kzpinfo" class="muted" style="flex:1;min-width:0">Списък КЗП…</span>
-       <label class="btn"><input type="file" id="kzpf" accept=".xlsx" hidden>Качи нов списък</label></div>`:""}
+       <a class="btn pri" href="#kzp">Справка КЗП</a><label class="btn"><input type="file" id="kzpf" accept=".xlsx" hidden>Качи нов списък</label></div>`:`<a class="btn" href="#kzp" style="justify-content:center">Справка КЗП</a>`}
   <div class="chips">${[["pending","Чакат"],["counter","Контраоферта"],["approved","Одобрени"],["rejected","Отказани"],["all","Всички"]]
     .map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${FILTER===k}">${l} · ${cnt(k)}</button>`).join("")}</div>
   <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
@@ -482,10 +482,46 @@ function renderHelp(){
     ${asen?forAsen+forOffice:forOffice+forAsen}${btns}`;
 }
 
+let KZPREP=null, KZF="all", KZQ="";
+async function renderKzp(start){
+  const d=start||KZPREP&&KZPREP.start||(()=>{const x=new Date();x.setDate(x.getDate()+10);return x.toISOString().slice(0,10)})();
+  app.innerHTML=`<div class="top"><a class="back" href="#">‹ Всички бланки</a><span class="sp"></span><a class="btn" href="#help">? Помощ</a></div>
+   <h1>Справка КЗП</h1><div class="muted">Зареждам…</div>`;
+  if(!KZPREP||KZPREP.start!==d)KZPREP=await api("/api/kzp/report?start="+d);
+  drawKzp();
+}
+function drawKzp(){
+  const R=KZPREP, it=R.items, bl=it.filter(x=>x.blocked).length;
+  const fd=s=>s?s.slice(8,10)+"."+s.slice(5,7)+"."+s.slice(0,4):"";
+  const q=KZQ.trim().toUpperCase();
+  const list=it.filter(x=>(KZF==="all"||(KZF==="blocked")===x.blocked)&&(!q||String(x.code).startsWith(q)||q.split(/\s+/).every(w=>(x.name||"").toUpperCase().includes(w))));
+  let cat=null;
+  app.innerHTML=`<div class="top"><a class="back" href="#">‹ Всички бланки</a><span class="sp"></span><a class="btn" href="#help">? Помощ</a></div>
+   <h1>Справка КЗП</h1>
+   <div class="muted">Списък: ${R.meta?`${R.meta.n} артикула, обновен ${new Date(R.meta.updated_at).toLocaleDateString("bg-BG")}`:"не е качен"}. Правило: без активация 30 дни преди брошурата (15 дни за кисело мляко, прясно мляко и хляб).</div>
+   <div class="card dec"><div class="r"><div class="fld"><label for="kd">Брошурата започва на</label><input class="inp" type="date" id="kd" value="${R.start}"></div>
+     <input class="inp search" id="kq" type="search" placeholder="Търси: име или код" value="${esc(KZQ)}" style="flex:1;min-width:180px"></div></div>
+   <div class="stats" style="grid-template-columns:repeat(3,1fr)"><div class="stat"><div class="n">${it.length}</div><div class="l">в КЗП</div></div>
+     <div class="stat"><div class="n g-ok">${it.length-bl}</div><div class="l">могат в брошурата</div></div>
+     <div class="stat"><div class="n g-bad">${bl}</div><div class="l">не могат</div></div></div>
+   <div class="chips">${[["all","Всички"],["free","Могат"],["blocked","Не могат"]].map(([k,l])=>`<button class="chip" data-kf="${k}" aria-pressed="${KZF===k}">${l}</button>`).join("")}</div>
+   <div class="card">${list.map(x=>{const h=x.category!==cat?(cat=x.category,`<div class="grp" style="padding-top:12px">${esc(cat||"Без категория")}</div>`):"";
+     return h+`<div class="item${x.blocked?" is-blocked":" is-kzp"}" style="margin:6px 0">
+       <div class="kzpbar"><span class="kzptag">КЗП</span>${x.blocked?`<b class="g-bad">не може · свободен от ${fd(x.free_from)}</b>`:`<b class="g-ok">може в брошурата</b>`}${x.perishable?`<span>малотраен · 15 дни</span>`:""}</div>
+       <div><div class="it-n">${esc(x.name)}</div><div class="code"><b>${x.code}</b>${x.firm?` · ${esc(x.firm)}`:""}</div></div>
+       <div class="prices">${x.sales30!=null?`<span>Продажби 30 д. <b>${x.sales30}</b></span>`:""}${x.margin30!=null?`<span>Марж каса <b>${f(x.margin30,1)}%</b></span>`:""}${x.stock!=null?`<span>Наличност <b>${x.stock}</b></span>`:""}</div>
+       ${x.activations.length?`<div class="prices">${x.activations.map(a=>`<span class="g-bad">Активация ${fd(a.start)}–${fd(a.end)}${a.discount?` (−${f(a.discount,0)}%)`:""}${a.price?` ${f(a.price)} €`:""}</span>`).join("")}</div>`:""}
+     </div>`}).join("")||`<div class="muted">Няма такива артикули.</div>`}</div>`;
+  $("#kd").onchange=()=>renderKzp($("#kd").value);
+  $("#kq").oninput=()=>{KZQ=$("#kq").value;const p=$("#kq").selectionStart;drawKzp();$("#kq").focus();$("#kq").setSelectionRange(p,p)};
+  app.querySelectorAll("[data-kf]").forEach(b=>b.onclick=()=>{KZF=b.dataset.kf;drawKzp()});
+}
+
 async function route(){
   if(!ME){try{ME=await api("/api/me")}catch(e){return}}
   {const sh=$("#sheet");if(sh)sh.hidden=true;}
   if(location.hash==="#help"){renderHelp();return}
+  if(location.hash==="#kzp"){try{await renderKzp()}catch(e){toast(e.message)}return}
   if(location.hash==="#new"){try{await renderNew()}catch(e){toast(e.message)}return}
   const m=location.hash.match(/^#f(\d+)/);
   try{m?await renderForm(m[1]):await renderList()}catch(e){if(e.message!=="401")toast(e.message)}

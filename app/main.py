@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import hmac
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
@@ -229,6 +229,31 @@ async def kzp_upload(file: UploadFile = File(...), user: dict = Depends(need("of
     return {"n": n}
 
 
+@app.get("/api/kzp/report")
+async def kzp_report(start: str | None = None, user: dict = Depends(me)):
+    """Справка КЗП за брошура с начало `start`: кои артикули могат да влязат и кои не (активация 30/15 дни)."""
+    from datetime import date as _date
+    d0 = _date.fromisoformat(start) if start else _date.today()
+    rows = db.rows("SELECT * FROM kzp ORDER BY grp, category, name")
+
+    def run():
+        from . import minmax
+        acts = kzp.activations({r["code"]: (kzp.DAYS_SHORT if r["perishable"] else kzp.DAYS_LONG) for r in rows}, d0)
+        mm, _ = minmax.info([r["code"] for r in rows])
+        return acts, mm
+    acts, mm = await run_in_threadpool(run)
+    out = []
+    for r in rows:
+        a = acts.get(r["code"], [])
+        x = mm.get(r["code"], {})
+        out.append({**r, "days": kzp.DAYS_SHORT if r["perishable"] else kzp.DAYS_LONG,
+                    "blocked": bool(a), "activations": [{**v, "start": v["start"].isoformat(), "end": v["end"].isoformat()} for v in a],
+                    "free_from": (max(v["end"] for v in a) + timedelta(days=(kzp.DAYS_SHORT if r["perishable"]
+                                                                               else kzp.DAYS_LONG) + 1)).isoformat() if a else None,
+                    "sales30": x.get("mm_sales30"), "margin30": x.get("margin30"), "stock": x.get("stock")})
+    return {"start": d0.isoformat(), "meta": kzp.meta(), "items": out}
+
+
 @app.get("/api/kzp/codes")
 def kzp_codes(user: dict = Depends(me)):
     return [r["code"] for r in db.rows("SELECT code FROM kzp")]
@@ -313,8 +338,9 @@ def _item_calc(it: dict, kind: str) -> dict:
     k = it.get("kzp")
     if k:
         # КЗП: маржът в промоцията не може да надминава регулярния марж
-        it["kzp_max_price"] = (int(cost / (1 - it["reg_margin"] / 100) * 100) / 100
-                               if cost is not None and it["reg_margin"] is not None and it["reg_margin"] < 100 else None)
+        c0 = cost if cost is not None else reg
+        it["kzp_max_price"] = (int(c0 / (1 - it["reg_margin"] / 100) * 100) / 100
+                               if c0 is not None and it["reg_margin"] is not None and it["reg_margin"] < 100 else None)
         it["kzp_ok_margin"] = (it["margin"] is None or it["reg_margin"] is None
                                or it["margin"] <= it["reg_margin"] + 0.05)
     it["checks"] = checks(it, kind)
