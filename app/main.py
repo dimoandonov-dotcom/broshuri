@@ -301,7 +301,8 @@ def checks(it: dict, kind: str) -> list[str]:
     base, reg, promo, dto = n("base"), n("reg"), n("promo"), n("dto_pct")
     md, vat, app_, shelf, cost = n("m_delivery"), n("vat") or 20, n("approved"), n("shelf"), it.get("cost")
     if not it.get("code"):
-        out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода.")
+        out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода. "
+                   "Потърси го по име в полето „Намери в Мистрал“ отдолу или напиши кода в „Наш код“.")
     if reg and md:
         net = md / (1 + vat / 100)
         if abs(reg - net) / net < 0.06 and vat:
@@ -422,6 +423,10 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
         remember_reg(row["supplier"], row["code"], v["reg"], "поправена", user["user"], v["base"], v["to_pct"])
     if p.code is not None:
         enrich_form(it["form_id"])
+        if not db.one("SELECT 1 AS x FROM items WHERE form_id=:f AND code IS NULL", f=it["form_id"]):
+            w = db.one("SELECT warnings FROM forms WHERE id=:f", f=it["form_id"])["warnings"] or ""
+            w = "\n".join(x for x in w.split("\n") if "без код" not in x and "Без пълен баркод" not in x)
+            db.q("UPDATE forms SET warnings=:w WHERE id=:f", w=w, f=it["form_id"])
     return get_form(it["form_id"], user)
 
 

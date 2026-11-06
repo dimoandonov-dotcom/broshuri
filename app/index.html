@@ -65,6 +65,10 @@ h1 span{color:var(--pen)}
 .fld input.pen{color:var(--pen);border-color:var(--pen);background:var(--pen-soft);font-weight:600}
 .fld input:disabled{opacity:.7}
 .chk{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:8px 10px;font-size:.82rem;display:flex;flex-direction:column;gap:3px}
+.h1in{font-family:var(--f-d);font-size:1.25rem;font-weight:700;width:100%;padding:6px 10px;background:transparent;border-color:transparent}
+.h1in:hover,.h1in:focus{border-color:var(--line);background:var(--bg)}
+.find{display:flex;flex-direction:column;gap:6px;background:var(--pen-soft);border-radius:10px;padding:10px}
+.fhits .hit{padding:8px 0}
 .grp{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--pen);font-weight:700;margin-top:2px}
 .mg{margin-left:auto;text-align:right;min-width:80px}
 .mg .v{font-family:var(--f-m);font-weight:600}
@@ -253,6 +257,11 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
       ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
+    ${it.code||!isOffice()?"":`<div class="find"><label class="grp" for="fs-${it.id}">Намери в Мистрал</label>
+      <input class="inp search" id="fs-${it.id}" data-find="${it.id}" type="search" placeholder="Име, код или баркод - напр. ${esc((it.name||"").split(/\s+/).slice(0,2).join(" ").toLowerCase())}" autocomplete="off">
+      <div class="fhits" id="fh-${it.id}"></div></div>`}
+    <div style="display:none">
+    </div>
     <div class="prices">${fund}</div>
     ${buyer}`}
     </div>`;
@@ -264,7 +273,7 @@ async function renderForm(id){
   const tot=it.reduce((a,x)=>a+(x.funded>0&&x.sales30?x.funded*x.sales30:0),0);
   const reg=[F.region_varna?"Варна":null,F.region_sofia?"София":null].filter(Boolean).join(", ")||"—";
   app.innerHTML=`<div class="top"><a class="back" href="#">‹ Всички бланки</a><span class="sp"></span><a class="btn" href="#help">? Помощ</a></div>
-  <div><h1>${esc(F.supplier||"Без име на доставчик")}</h1>
+  <div>${isOffice()?`<input class="inp h1in" id="supn" value="${esc(F.supplier||"")}" placeholder="Напиши доставчика" title="Името на доставчика - може да се поправи">`:`<h1>${esc(F.supplier||"Без име на доставчик")}</h1>`}
    <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
   ${(()=>{const n=it.reduce((a,x)=>a+(x.checks?x.checks.length:0),0);return n?`<div class="chk"><b>⚠ ${n} неща за проверка</b> - виж червените полета по редовете.</div>`:""})()}
@@ -292,7 +301,17 @@ async function renderForm(id){
     ${isOffice()?(F.sent_at?`<span class="badge b-sent">Изпратена ${dt(F.sent_at)}</span>`:`<button class="btn" id="sent" ${F.status==="pending"?"disabled":""}>Отбележи изпратена</button>`):""}
     ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
   </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 30 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
-  app.querySelectorAll(".item input").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  app.querySelectorAll(".item input[data-k]").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  if($("#supn"))$("#supn").onchange=async()=>{await post(`/api/forms/${F.id}`,{supplier:$("#supn").value});toast("Доставчикът е записан")};
+  app.querySelectorAll("[data-find]").forEach(inp=>{let t=null;inp.oninput=()=>{clearTimeout(t);const q=inp.value.trim(),box=$("#fh-"+inp.dataset.find);
+    if(q.length<2){box.innerHTML="";return}
+    t=setTimeout(async()=>{const r=await api("/api/articles/search?q="+encodeURIComponent(q));
+      box.innerHTML=r.length?r.slice(0,8).map(a=>`<button type="button" class="hit" data-code="${a.code}"><div style="flex:1;min-width:0"><div class="it-n">${esc(a.name)}</div>
+        <div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./30 д.</span><span>${esc(a.supplier||"")}</span></div></div><span class="badge b-approved">Това е</span></button>`).join("")
+        :`<div class="muted">Няма такъв артикул в Мистрал.</div>`;
+      box.querySelectorAll("[data-code]").forEach(b=>b.onclick=async()=>{toast("Зареждам от Мистрал…");
+        try{FORM=await post("/api/items/"+inp.dataset.find,{code:+b.dataset.code});const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y);toast("Кодът е записан")}catch(e){toast(e.message)}});
+    },300)}});
   if($("#net"))$("#net").onchange=()=>{NET=$("#net").checked;try{localStorage.setItem("br_net",NET?"1":"0")}catch(e){}const y=window.scrollY;renderForm(F.id).then(()=>window.scrollTo(0,y))};
   app.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{
     const s=F.status===b.dataset.st?"pending":b.dataset.st;

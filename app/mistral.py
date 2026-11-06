@@ -153,5 +153,5 @@ def enrich(items: list[dict]) -> tuple[list[dict], list[str]]:
         out.append(r)
     miss = sum(1 for r in out if not r.get("code"))
     if miss:
-        notes.append(f"{miss} арт. без код в Мистрал - въведи кода ръчно.")
+        notes.append(f"{miss} арт. без код в Мистрал - намери ги по име на реда (полето „Намери в Мистрал“).")
     return out, notes
