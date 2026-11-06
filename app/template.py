@@ -148,7 +148,7 @@ def parse_template(data: bytes, name: str) -> dict | None:
             if "от доставчик" in t and not r["supplier"]:
                 rest = [_t(x) for x in row[j + 1:] if _t(x) and not set(_t(x)) <= set(".… ")
                         and not _low(x).startswith(("попълва", "доставчик", "купувач"))]
-                r["supplier"] = rest[0] if rest else ""
+                r["supplier"] = rest[0].strip(" .…") if rest else ""
             if "период на промоцията" in t:
                 ds = _dates_after(row, j)
                 r["promo_from"], r["promo_to"] = (ds + [None, None])[:2]
