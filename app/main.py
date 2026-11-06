@@ -20,7 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from . import db, extras, kzp, mistral, parse
+from . import db, extras, kzp, mistral, parse, push
 
 app = FastAPI(title="Брошури")
 SECRET = os.getenv("SECRET_KEY", "dev-secret")
@@ -49,6 +49,14 @@ def me(request: Request) -> dict:
     if u in users() and s and hmac.compare_digest(s, _sig(u)):
         return {"user": u, "role": users()[u]["role"]}
     raise HTTPException(401, "Влез отново.")
+
+
+def approvers() -> list[str]:
+    return [u for u, v in users().items() if v["role"] in ("approver", "admin")]
+
+
+def office_users() -> list[str]:
+    return [u for u, v in users().items() if v["role"] in ("office", "admin")]
 
 
 def need(*roles):
@@ -537,9 +545,9 @@ def mark_ready(fid: int, user: dict = Depends(need("office"))):
     n_chk = sum(len(it["checks"]) for it in f["items"])
     kz = f.get("kzp_count") or 0
     url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
-    extras.telegram(f"Брошура за цени: {f['supplier'] or 'доставчик'} - {len(f['items'])} арт."
-                    + (f", {kz} от КЗП" if kz else "") + (f", {n_chk} за проверка" if n_chk else "")
-                    + f"\nПодготви: {user['user']}\n{url}")
+    push.send(approvers(), f"Брошура за цени: {f['supplier'] or 'доставчик'}",
+              f"{len(f['items'])} арт." + (f", {kz} от КЗП" if kz else "") + (f", {n_chk} за проверка" if n_chk else "")
+              + f" · подготви {user['user']}", f"/#f{fid}")
     return get_form(fid, user)
 
 
@@ -560,6 +568,9 @@ def return_to_office(fid: int, user: dict = Depends(need("approver"))):
         db.q("UPDATE items SET dto_pct=:d, promo=:p, dto_src='авто' WHERE id=:id",
              d=dto, p=round(reg * (1 - dto / 100), 4), id=it["id"])
     st = f["status"] if f["status"] != "pending" else "approved"
+    push.send(office_users(), f"Асен върна: {f['supplier'] or 'бланка'}",
+              f"{extras.ST.get(st, st)} · {sum(1 for x in f['items'] if x.get('approved') is not None)} цени - провери и прати на доставчика",
+              f"/#f{fid}")
     db.q("""UPDATE forms SET status=:s, decided_by=COALESCE(decided_by, :u), decided_at=COALESCE(decided_at, now()),
             returned_at=now(), returned_by=:u WHERE id=:id""", s=st, u=user["user"], id=fid)
     return get_form(fid, user)
@@ -664,6 +675,57 @@ INDEX = Path(__file__).with_name("index.html")
 LOGO = Path(__file__).with_name("static") / "logo.png"
 
 
+STATIC = Path(__file__).with_name("static")
+
+
+@app.get("/sw.js")
+def sw():
+    from fastapi.responses import FileResponse
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/icon-{n}.png")
+def icon(n: int):
+    from fastapi.responses import FileResponse
+    if n not in (180, 192, 512):
+        raise HTTPException(404)
+    return FileResponse(STATIC / f"icon-{n}.png", media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return JSONResponse({
+        "name": "Брошури 300", "short_name": "Брошури", "start_url": "/", "scope": "/", "display": "standalone",
+        "background_color": "#2b2a28", "theme_color": "#2b2a28", "lang": "bg",
+        "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]},
+        media_type="application/manifest+json")
+
+
+@app.get("/api/push/key")
+def push_key():
+    return {"key": push.PUB}
+
+
+class PushSub(BaseModel):
+    endpoint: str
+    keys: dict
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(p: PushSub, user: dict = Depends(me)):
+    push.subscribe(user["user"], {"endpoint": p.endpoint, "keys": p.keys})
+    return {"ok": True}
+
+
+@app.post("/api/push/test")
+def push_test(user: dict = Depends(me)):
+    n = push.send([user["user"]], "Брошури 300", "Известията работят ✓", "/")
+    return {"sent": n}
+
+
 @app.get("/logo.png")
 def logo():
     from fastapi.responses import FileResponse
@@ -688,5 +750,6 @@ async def _mail_loop():
 async def _start():
     db.init()
     kzp.init()
+    push.init()
     if os.getenv("IMAP_HOST"):
         asyncio.create_task(_mail_loop())

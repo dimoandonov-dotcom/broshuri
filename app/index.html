@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Брошури">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#2b2a28">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
 <title>Брошури</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600;700;800&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -194,6 +200,7 @@ async function renderList(){
   const STG={prep:["Подготвя се","b-counter"],asen:["При Асен","b-pending"],back:["Върната от Асен","b-approved"],sent:["Изпратена","b-sent"]};
   app.innerHTML=`<div class="top"><h1>Брошури <span>300</span></h1><span class="sp"></span><a class="btn" href="#help">? Помощ</a><button class="btn" id="lo">Изход</button></div>
   ${heroHTML()}
+  <div class="card" id="pushbox" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap" hidden></div>
   ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
      <b>Качи бланки</b><br><span class="muted">Excel, PDF или снимка - може няколко наведнъж</span></label>
      <div class="top"><span class="muted">Бланките по имейл се прибират сами на 5 мин.</span><span class="sp"></span><button class="btn" id="mc">Провери пощата</button></div>
@@ -209,6 +216,7 @@ async function renderList(){
       <div class="muted">${x.kind==="comp"?"Компенсация":"Брошура"}${x.brochure_no?" № "+esc(x.brochure_no):""} · ${x.n_items} арт. · ${dt(x.promo_from)}–${dt(x.promo_to)}${x.has_warn?" · ⚠":""}${x.source==="email"?" · имейл":""}</div></div>
       <span class="badge ${STG[x.stage][1]}">${STG[x.stage][0]}</span><span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
     ||`<div class="card muted">Няма бланки тук.</div>`}</div>`;
+  drawPush();setBadge(cnt(asen?"asen":"back"));
   $("#lo").onclick=async()=>{await post("/api/logout",{});ME=null;renderLogin()};
   app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderList()});
   if(isOffice()){
@@ -474,7 +482,7 @@ function renderHelp(){
   const asen=ME&&ME.role==="approver";
   const dl=keys=>`<dl>${keys.map(k=>`<div><dt>${HELP[k][0]}</dt><dd>${HELP[k][1]}${HELP[k][2]?`<span class="ex">Пример: ${HELP[k][2]}</span>`:""}</dd></div>`).join("")}</dl>`;
   const forAsen=`<div class="card hdoc"><h2>За Асен - как решаваш</h2><ol>
-     <li>Получаваш съобщение в Telegram и отваряш линка.</li>
+     <li>Получаваш известие на телефона (от приложението „Брошури“) и го натискаш.</li>
      <li>Гледаш продажбите (Варна/София), наличността и как е вървял в миналата брошура.</li>
      <li>Пишеш <b>Промо рафт</b> (или % отстъпка). Маржът се смята веднага.</li>
      <li>Ако маржът е червен - натисни <b>Контраоферта</b> и напиши бележка (напр. „искаме Д.Т.О. 15%“). Системата вече е сметнала каква доставна цена да поискаме.</li>
@@ -486,7 +494,7 @@ function renderHelp(){
      <li><b>Нова бланка от нас:</b> „+ Нова брошура по доставчик“ → избери доставчик (или търси артикул по име, код, баркод) → отметни артикулите → „Създай бланката“.</li>
      <li>Провери цените на доставчика. Ако имаш цени без ДДС - сложи отметката „Въвеждам цените без ДДС“.</li>
      <li>Оправи всичко червено ⚠. Всичко, което пишеш, се записва веднага (излиза „Записано ✓“). Ако фирмата не дава Д.Т.О., напиши <b>0</b> в Д.Т.О. - тогава системата не иска отстъпка в бланката.</li>
-     <li>Натисни <b>„Изпрати на Асен за цени“</b> - той получава съобщение в Telegram с линк към бланката.</li>
+     <li>Натисни <b>„Изпрати на Асен за цени“</b> - той получава известие на телефона с линк към бланката. Когато Асен я върне, и ти получаваш известие.</li>
      <li>След решението на Асен: свали <b>„Бланка 6Б с цените“</b>, прати я на доставчика и натисни <b>„Отбележи изпратена“</b>.</li></ol>
      ${dl(["base","to","reg","dto","promo","comp","code","checks"])}</div>`;
   const btns=`<div class="card hdoc"><h2>Бутоните</h2><dl>
@@ -535,6 +543,40 @@ function drawKzp(){
   $("#kq").oninput=()=>{KZQ=$("#kq").value;const p=$("#kq").selectionStart;drawKzp();$("#kq").focus();$("#kq").setSelectionRange(p,p)};
   app.querySelectorAll("[data-kf]").forEach(b=>b.onclick=()=>{KZF=b.dataset.kf;drawKzp()});
 }
+
+// ---------- приложение на телефона + известия ----------
+const IOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const STANDALONE=window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
+const b64u=s=>{const p="=".repeat((4-s.length%4)%4),b=atob((s+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(b,c=>c.charCodeAt(0))};
+async function pushState(){
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))return IOS&&!STANDALONE?"install":"none";
+  if(Notification.permission==="denied")return "denied";
+  try{const r=await navigator.serviceWorker.ready;const s=await r.pushManager.getSubscription();if(s&&Notification.permission==="granted"){post("/api/push/subscribe",s.toJSON()).catch(()=>{});return "on"}}catch(e){}
+  return "off";
+}
+async function enablePush(){
+  try{
+    const perm=await Notification.requestPermission();if(perm!=="granted"){toast("Известията не са разрешени");return}
+    const {key}=await (await fetch("/api/push/key")).json();if(!key){toast("Известията още не са настроени на сървъра");return}
+    const r=await navigator.serviceWorker.ready;
+    const sub=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(key)});
+    await post("/api/push/subscribe",sub.toJSON());
+    const t=await post("/api/push/test",{});toast(t.sent?"Известията са включени ✓":"Включени - но тестът не мина");drawPush();
+  }catch(e){toast("Не стана: "+e.message)}
+}
+async function drawPush(){
+  const box=$("#pushbox");if(!box)return;
+  const st=await pushState();
+  const who=ME.role==="approver"?"нова бланка за цени":"бланка, върната от Асен";
+  box.innerHTML=st==="on"?`<span class="muted">🔔 Известията са включени - ще разбереш за всяка ${who}.</span>`
+   :st==="install"?`<div><b>Сложи приложението на телефона</b><br><span class="muted">В Safari натисни <b>Share</b> (квадратчето със стрелка) → <b>Add to Home Screen</b> → <b>Add</b>. После го отваряй от иконката „Брошури“ и тук ще излезе бутон за известия.</span></div>`
+   :st==="off"?`<div style="flex:1;min-width:200px"><b>Включи известията</b><br><span class="muted">Ще ти излиза съобщение на ${IOS||/android/i.test(navigator.userAgent)?"телефона":"компютъра"} за всяка ${who}.</span></div><button class="btn pri" id="pushon">Включи известия</button>`
+   :st==="denied"?`<span class="muted">Известията са забранени в настройките на браузъра/телефона. Разреши ги за „Брошури“ и презареди.</span>`:"";
+  box.hidden=st==="none";
+  if($("#pushon"))$("#pushon").onclick=enablePush;
+}
+function setBadge(n){try{n?navigator.setAppBadge&&navigator.setAppBadge(n):navigator.clearAppBadge&&navigator.clearAppBadge()}catch(e){}}
 
 async function route(){
   if(!ME){try{ME=await api("/api/me")}catch(e){return}}
