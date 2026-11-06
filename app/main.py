@@ -20,7 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from . import db, extras, mistral, parse
+from . import db, extras, kzp, mistral, parse
 
 app = FastAPI(title="Брошури")
 SECRET = os.getenv("SECRET_KEY", "dev-secret")
@@ -214,6 +214,26 @@ async def article_search(q: str, supplier: str | None = None, user: dict = Depen
     return await run_in_threadpool(minmax.search, q, supplier)
 
 
+@app.get("/api/kzp")
+def kzp_info(user: dict = Depends(me)):
+    return kzp.meta() or {}
+
+
+@app.post("/api/kzp/upload")
+async def kzp_upload(file: UploadFile = File(...), user: dict = Depends(need("office"))):
+    data = await file.read()
+    try:
+        n = await run_in_threadpool(kzp.load_xlsx, data, file.filename or "kzp.xlsx", user["user"])
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"Файлът не става: {e}")
+    return {"n": n}
+
+
+@app.get("/api/kzp/codes")
+def kzp_codes(user: dict = Depends(me)):
+    return [r["code"] for r in db.rows("SELECT code FROM kzp")]
+
+
 @app.get("/api/today")
 def today_phrase():
     from zoneinfo import ZoneInfo
@@ -290,6 +310,13 @@ def _item_calc(it: dict, kind: str) -> dict:
     it["need_delivery"] = round(app_ * (1 - MIN_MARGIN / 100), 4) if app_ else None
     it["need_dto"] = round((1 - it["need_delivery"] / reg) * 100, 1) if app_ and reg else None
     it["min_margin"] = MIN_MARGIN
+    k = it.get("kzp")
+    if k:
+        # КЗП: маржът в промоцията не може да надминава регулярния марж
+        it["kzp_max_price"] = (int(cost / (1 - it["reg_margin"] / 100) * 100) / 100
+                               if cost is not None and it["reg_margin"] is not None and it["reg_margin"] < 100 else None)
+        it["kzp_ok_margin"] = (it["margin"] is None or it["reg_margin"] is None
+                               or it["margin"] <= it["reg_margin"] + 0.05)
     it["checks"] = checks(it, kind)
     return it
 
@@ -300,6 +327,16 @@ def checks(it: dict, kind: str) -> list[str]:
     n = lambda k: float(it[k]) if it.get(k) is not None else None  # noqa: E731
     base, reg, promo, dto = n("base"), n("reg"), n("promo"), n("dto_pct")
     md, vat, app_, shelf, cost = n("m_delivery"), n("vat") or 20, n("approved"), n("shelf"), it.get("cost")
+    k = it.get("kzp")
+    if k:
+        if k["activations"]:
+            a = k["activations"][0]
+            out.append(f"КЗП: артикулът е бил на активация {a['start'][8:10]}.{a['start'][5:7]}–{a['end'][8:10]}.{a['end'][5:7]}"
+                       f"{(' (-' + format(a['discount'], '.0f') + '%)') if a.get('discount') else ''} в последните "
+                       f"{k['days']} дни преди брошурата - НЕ може да влезе в брошурата.")
+        if not it.get("kzp_ok_margin"):
+            out.append(f"КЗП: маржът в промоцията {it['margin']:.1f}% е по-голям от регулярния {it['reg_margin']:.1f}%. "
+                       f"Промо цената трябва да е най-много {it['kzp_max_price']:.2f} €.")
     if not it.get("code"):
         out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода. "
                    "Потърси го по име в полето „Намери в Мистрал“ отдолу или напиши кода в „Наш код“.")
@@ -343,8 +380,24 @@ def get_form(fid: int, user: dict = Depends(me)):
     if not f:
         raise HTTPException(404, "Няма такава бланка.")
     f.pop("file_data", None)
-    f["items"] = [_item_calc(it, f["kind"]) for it in
-                  db.rows("SELECT * FROM items WHERE form_id=:f ORDER BY pos", f=fid)]
+    items = db.rows("SELECT * FROM items WHERE form_id=:f ORDER BY pos", f=fid)
+    kz = kzp.lookup([it["code"] for it in items])
+    acts = {}
+    if kz:
+        from datetime import date as _date
+        start = f.get("promo_from") or _date.today()
+        try:
+            acts = kzp.activations({c: (kzp.DAYS_SHORT if k["perishable"] else kzp.DAYS_LONG) for c, k in kz.items()}, start)
+        except Exception as e:  # noqa: BLE001
+            f["warnings"] = ((f.get("warnings") or "") + f"\nКЗП: не успях да проверя активациите ({e})").strip()
+    for it in items:
+        k = kz.get(it["code"])
+        it["kzp"] = ({"category": k["category"], "perishable": k["perishable"],
+                      "days": kzp.DAYS_SHORT if k["perishable"] else kzp.DAYS_LONG,
+                      "activations": [{**a, "start": a["start"].isoformat(), "end": a["end"].isoformat()}
+                                      for a in acts.get(it["code"], [])]} if k else None)
+    f["items"] = [_item_calc(it, f["kind"]) for it in items]
+    f["kzp_count"] = sum(1 for it in items if it["kzp"])
     return f
 
 
@@ -560,5 +613,6 @@ async def _mail_loop():
 @app.on_event("startup")
 async def _start():
     db.init()
+    kzp.init()
     if os.getenv("IMAP_HOST"):
         asyncio.create_task(_mail_loop())

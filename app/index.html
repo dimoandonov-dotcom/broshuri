@@ -11,13 +11,13 @@
   /* Family 300: въглен, крем и опалено оранжево, с искри */
   --bg:#f6efe3; --surface:#fffbf4; --sunk:#ede3d2; --line:#e1d4bf;
   --fg:#2b2a28; --muted:#75695b; --pen:#c9561a; --pen-soft:#fbe4d3; --char:#2b2a28; --cream:#f6efe3;
-  --ok:#2f7a4a; --ok-soft:#e1f0e3; --warn:#a86500; --warn-soft:#fbefd6; --bad:#b3261e; --bad-soft:#fbe2df;
+  --kzp:#1f6fb2; --kzp-soft:#e3eff9; --ok:#2f7a4a; --ok-soft:#e1f0e3; --warn:#a86500; --warn-soft:#fbefd6; --bad:#b3261e; --bad-soft:#fbe2df;
   --f-d:"Unbounded","Golos Text",system-ui,sans-serif; --f-b:"Golos Text",system-ui,-apple-system,sans-serif;
   --f-s:"Caveat","Segoe Script",cursive; --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#1f1d1b; --surface:#2a2724; --sunk:#35312d; --line:#44403a; --fg:#f3eadb; --muted:#b3a592;
-  --pen:#f07b3a; --pen-soft:#43281a; --char:#141312; --cream:#f3eadb; --ok:#5fc68a; --ok-soft:#173226;
+  --pen:#f07b3a; --pen-soft:#43281a; --kzp:#5aa6e6; --kzp-soft:#16283a; --char:#141312; --cream:#f3eadb; --ok:#5fc68a; --ok-soft:#173226;
   --warn:#f0a83a; --warn-soft:#3a2a10; --bad:#ff7a70; --bad-soft:#3d1a18; color-scheme:dark}}
 *{box-sizing:border-box}
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -69,6 +69,12 @@ h1 span{color:var(--pen)}
 .h1in:hover,.h1in:focus{border-color:var(--line);background:var(--bg)}
 .find{display:flex;flex-direction:column;gap:6px;background:var(--pen-soft);border-radius:10px;padding:10px}
 .fhits .hit{padding:8px 0}
+.item.is-kzp{background:var(--kzp-soft);border:2px solid var(--kzp);border-radius:14px;padding:12px;margin:8px 0}
+.item.is-blocked{border-color:var(--bad);background:var(--bad-soft)}
+.kzpbar{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:.82rem;color:var(--fg)}
+.kzptag{background:var(--kzp);color:#fff;font-weight:800;letter-spacing:.06em;font-size:.72rem;padding:3px 9px;border-radius:6px}
+.is-blocked .kzptag{background:var(--bad)}
+.kzpmark{display:inline-block;background:var(--kzp);color:#fff;font-weight:800;font-size:.66rem;padding:1px 6px;border-radius:5px;margin-right:6px;vertical-align:1px}
 .grp{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--pen);font-weight:700;margin-top:2px}
 .mg{margin-left:auto;text-align:right;min-width:80px}
 .mg .v{font-family:var(--f-m);font-weight:600}
@@ -185,7 +191,10 @@ async function renderList(){
   ${isOffice()?`<label class="drop" id="drop"><input type="file" id="fi" multiple accept=".xlsx,.xls,.xlsm,.pdf,image/*" hidden>
      <b>Качи бланки</b><br><span class="muted">Excel, PDF или снимка - може няколко наведнъж</span></label>
      <div class="top"><span class="muted">Бланките по имейл се прибират сами на 5 мин.</span><span class="sp"></span><button class="btn" id="mc">Провери пощата</button></div>
-     <a class="btn pri" href="#new" style="justify-content:center">+ Нова брошура по доставчик</a>`:""}
+     <a class="btn pri" href="#new" style="justify-content:center">+ Нова брошура по доставчик</a>
+     <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:2px solid var(--kzp);background:var(--kzp-soft)">
+       <span class="kzptag">КЗП</span><span id="kzpinfo" class="muted" style="flex:1;min-width:0">Списък КЗП…</span>
+       <label class="btn"><input type="file" id="kzpf" accept=".xlsx" hidden>Качи нов списък</label></div>`:""}
   <div class="chips">${[["pending","Чакат"],["counter","Контраоферта"],["approved","Одобрени"],["rejected","Отказани"],["all","Всички"]]
     .map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${FILTER===k}">${l} · ${cnt(k)}</button>`).join("")}</div>
   <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
@@ -200,6 +209,9 @@ async function renderList(){
     fi.onchange=()=>upload(fi.files);
     d.ondragover=e=>{e.preventDefault();d.classList.add("on")};d.ondragleave=()=>d.classList.remove("on");
     d.ondrop=e=>{e.preventDefault();d.classList.remove("on");upload(e.dataTransfer.files)};
+    api("/api/kzp").then(m=>{$("#kzpinfo").textContent=m&&m.n?`${m.n} артикула · обновен ${new Date(m.updated_at).toLocaleDateString("bg-BG")} · ${m.file_name||""}`:"Няма качен списък - качи файла от папка КЗП"}).catch(()=>{});
+    $("#kzpf").onchange=async()=>{const fd=new FormData();fd.append("file",$("#kzpf").files[0]);toast("Качвам списъка КЗП…");
+      try{const r=await api("/api/kzp/upload",{method:"POST",body:fd});KZP=null;toast(`Списъкът КЗП е обновен: ${r.n} артикула`);renderList()}catch(e){toast(e.message)}};
     $("#mc").onclick=async()=>{toast("Проверявам пощата…");try{const r=await post("/api/mail/check",{});toast(r.new?`Нови бланки: ${r.new}`:"Няма нови бланки");renderList()}catch(e){toast(e.message)}};
   }
 }
@@ -239,8 +251,12 @@ function itemHTML(it,kind){
       <span>База <b>${f(it.base,4)}</b></span><span>Т.О. <b>${it.to_pct!=null?f(it.to_pct,1)+"%":"—"}</b></span>
       <span>Редовна <b>${f(it.reg,4)}</b></span><span>Д.Т.О. <b class="${it.dto_pct?"g-ok":"g-bad"}">${it.dto_pct!=null?f(it.dto_pct,1)+"%":"няма"}</b></span>
       <span>Промо дост. <b>${f(it.promo,4)}</b></span></div>`;
-  return `<div class="item" data-id="${it.id}">
-    <div><div class="it-n">${esc(it.name)}</div>
+  const k=it.kzp, blocked=k&&k.activations&&k.activations.length;
+  const kz=k?`<div class="kzpbar" data-h="kzp"><span class="kzptag">КЗП</span>
+      <span>${esc(k.category||"")}${k.perishable?" · малотраен (15 дни)":""}</span>
+      ${blocked?`<b class="g-bad">не може в брошурата</b>`:it.kzp_max_price!=null?`<span>Промо цена най-много <b>${f(it.kzp_max_price)} €</b> (марж ≤ ${f(it.reg_margin,1)}%)</span>`:""}</div>`:"";
+  return `<div class="item${k?" is-kzp":""}${blocked?" is-blocked":""}" data-id="${it.id}">
+    ${kz}<div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
     <div class="prices">${reg("Продажби 30 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span data-h="stock">Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
       ${it.margin30!=null?`<span data-h="margin30">Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
@@ -276,6 +292,8 @@ async function renderForm(id){
   <div>${isOffice()?`<input class="inp h1in" id="supn" value="${esc(F.supplier||"")}" placeholder="Напиши доставчика" title="Името на доставчика - може да се поправи">`:`<h1>${esc(F.supplier||"Без име на доставчик")}</h1>`}
    <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
+  ${F.kzp_count?`<div class="kzpbar card" style="border:2px solid var(--kzp);background:var(--kzp-soft)" data-h="kzp"><span class="kzptag">КЗП</span>
+     <span><b>${F.kzp_count}</b> арт. от списъка на КЗП - светят в синьо. Промо маржът им не може да е над регулярния.</span></div>`:""}
   ${(()=>{const n=it.reduce((a,x)=>a+(x.checks?x.checks.length:0),0);return n?`<div class="chk"><b>⚠ ${n} неща за проверка</b> - виж червените полета по редовете.</div>`:""})()}
   ${ME.role==="approver"?"":`<label class="card" style="display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer"><input type="checkbox" id="net" ${NET?"checked":""} style="width:20px;height:20px">
     <span><b>Въвеждам цените без ДДС</b><br><span class="muted">системата добавя ДДС по ставката на всеки артикул от Мистрал</span></span></label>`}
@@ -330,11 +348,12 @@ async function saveItem(inp){
   else{body[k]=k==="sales30"||k==="code"?Math.round(v):v;if(NET&&["base","reg","promo"].includes(k))body.net=true}
   try{FORM=await post("/api/items/"+id,body);const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y)}catch(e){toast(e.message)}
 }
-let SUPS=null, ARTS=[], PICK=new Set(), QRY="", QT=null;
+let SUPS=null, ARTS=[], PICK=new Set(), QRY="", QT=null, KZP=null;
 const matches=(a,q)=>{q=q.trim().toUpperCase();if(!q)return true;if(/^\d+$/.test(q))return String(a.code).startsWith(q);
   return q.split(/\s+/).every(w=>(a.name||"").toUpperCase().includes(w))};
 async function renderNew(){
   if(!SUPS)SUPS=await api("/api/suppliers");
+  if(!KZP){try{KZP=new Set(await api("/api/kzp/codes"))}catch(e){KZP=new Set()}}
   const today=new Date().toISOString().slice(0,10);
   app.innerHTML=`<a class="back" href="#">‹ Всички бланки</a><h1>Нова брошура</h1>
   <div class="card dec">
@@ -392,7 +411,7 @@ function drawArts(){
      <b>${QRY.trim()?`${list.length} от ${ARTS.length}`:ARTS.length} артикула</b><span class="muted" id="cnt"></span><button class="btn" id="top">Топ 10 по продажби</button></div>
    ${list.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
       <input type="checkbox" data-c="${a.code}" ${PICK.has(a.code)?"checked":""} style="width:20px;height:20px">
-      <div style="flex:1;min-width:0"><div class="it-n">${esc(a.name)}</div>
+      <div style="flex:1;min-width:0"><div class="it-n">${KZP&&KZP.has(a.code)?`<span class="kzpmark">КЗП</span>`:""}${esc(a.name)}</div>
       <div class="prices"><span>Варна <b>${a.varna??a.sales30}</b></span><span>София <b>${a.sofia??0}</b> бр./30 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
       ${a.last_promo?`<span>брошура ${esc(a.last_promo)}${a.uplift?` ×${f(a.uplift,1)}`:""}</span>`:""}<span class="code">${a.code}</span></div></div></label>`).join("")}</div>`;
   const upd=()=>{$("#cnt").textContent=PICK.size?`избрани ${PICK.size}`:"";$("#mk").disabled=!PICK.size};
@@ -402,6 +421,7 @@ function drawArts(){
 }
 // ---------- помощ: какво е всяко число (пример: Bolgare Мерло от брошура 304) ----------
 const HELP={
+ kzp:["КЗП","Артикулите от списъка на КЗП (файлът в папка КЗП в Drive) светят в синьо. За тях:<br>1. Маржът в промоцията не може да е по-голям от регулярния марж - може да е равен или по-малък. Системата показва най-високата позволена промо цена.<br>2. Ако артикулът е бил на каквато и да е активация в последните 30 дни преди началото на брошурата (15 дни за кисело мляко, прясно мляко и хляб) - не може да влезе в брошурата и свети в червено.","Регулярен марж 25,2% → промо марж най-много 25,2%"],
  shelf:["Рафт сега","Цената, на която артикулът се продава в магазина днес. Идва от Мистрал (основната ценова листа).","Bolgare Мерло: 4,20 €"],
  approved:["Промо рафт","Цената в брошурата - тя е решението на Асен. Пише се с ДДС, както ще е на етикета.","4,20 € → 3,36 €"],
  off:["Отстъпка %","Колко по-евтино е промо цената от сегашната. Може да пишеш процента вместо цената - системата смята цената сама.","1 − 3,36 ÷ 4,20 = 20%"],
