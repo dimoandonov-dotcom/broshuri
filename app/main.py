@@ -178,7 +178,7 @@ def ingest(data: bytes, name: str, ctype: str, source: str = "upload", source_fr
         w = "\n".join(filter(None, ["\n".join(p["warnings"]), *notes]))
         db.q("UPDATE forms SET warnings=:w WHERE id=:id", w=w, id=fid)
     url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
-    extras.telegram(f"Нова бланка за брошура: {p['supplier'] or 'доставчик?'} - {len(p['items'])} арт.\n{url}")
+    # Асен получава известие, когато офисът натисне „Изпрати на Асен“ (след проверка и поправки)
     return fid
 
 
@@ -304,7 +304,7 @@ async def new_form(p: NewForm, user: dict = Depends(need("office"))):
         db.q("UPDATE forms SET warnings=:w WHERE id=:id", w="\n".join(notes), id=fid)
     url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
     if p.notify or user["role"] != "admin":
-        extras.telegram(f"Брошура за цени: {p.supplier} - {len(p.codes)} арт. Чака твоите цени.\n{url}")
+        pass  # известието към Асен тръгва с бутона „Изпрати на Асен“
     return {"id": fid}
 
 
@@ -389,7 +389,7 @@ def checks(it: dict, kind: str) -> list[str]:
 
 
 SUMMARY = """SELECT f.id, f.supplier, f.kind, f.brochure_no, f.promo_from, f.promo_to, f.status, f.source,
-    f.created_at, f.decided_by, f.decided_at, f.sent_at, f.warnings IS NOT NULL AND f.warnings <> '' AS has_warn,
+    f.created_at, f.decided_by, f.decided_at, f.sent_at, f.ready_at, f.warnings IS NOT NULL AND f.warnings <> '' AS has_warn,
     COUNT(i.id) AS n_items, COUNT(i.approved) AS n_approved
   FROM forms f LEFT JOIN items i ON i.form_id = f.id"""
 
@@ -461,6 +461,7 @@ class ItemPatch(BaseModel):
     to_pct: float | None = None
     dto_pct: float | None = None
     promo: float | None = None
+    clear: list[str] = []      # изтрити полета на доставчика (празно поле)
     net: bool = False          # цените са въведени БЕЗ ДДС - системата добавя ДДС по ставката на артикула
     clear_approved: bool = False
 
@@ -480,6 +481,11 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
             db.q(f"UPDATE items SET {k}=:v WHERE id=:id", v=v, id=iid)
     # цени от доставчика, въведени от офиса: базова -> (Т.О.) -> редовна -> (Д.Т.О.) -> промо доставна
     prices = {k: getattr(p, k) for k in ("base", "to_pct", "reg", "dto_pct", "promo") if getattr(p, k) is not None}
+    cl = [k for k in p.clear if k in ("base", "to_pct", "reg", "dto_pct", "promo")]
+    if cl:
+        if "dto_pct" in cl or "promo" in cl:
+            cl = list(set(cl) | {"dto_pct", "promo"})
+        db.q(f"UPDATE items SET {', '.join(k + '=NULL' for k in cl)} WHERE id=:id", id=iid)
     if prices and p.net:
         vat = float((db.one("SELECT vat FROM items WHERE id=:id", id=iid) or {}).get("vat") or 20)
         for k in ("base", "reg", "promo"):
@@ -517,6 +523,20 @@ async def refresh(fid: int, user: dict = Depends(me)):
     f = get_form(fid, user)
     f["notes"] = notes
     return f
+
+
+@app.post("/api/forms/{fid}/ready")
+def mark_ready(fid: int, user: dict = Depends(need("office"))):
+    """Офисът е проверил бланката - отива при Асен (Telegram с линк)."""
+    f = get_form(fid, user)
+    db.q("UPDATE forms SET ready_at=now(), ready_by=:u WHERE id=:id", u=user["user"], id=fid)
+    n_chk = sum(len(it["checks"]) for it in f["items"])
+    kz = f.get("kzp_count") or 0
+    url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
+    extras.telegram(f"Брошура за цени: {f['supplier'] or 'доставчик'} - {len(f['items'])} арт."
+                    + (f", {kz} от КЗП" if kz else "") + (f", {n_chk} за проверка" if n_chk else "")
+                    + f"\nПодготви: {user['user']}\n{url}")
+    return get_form(fid, user)
 
 
 @app.post("/api/forms/{fid}/sent")

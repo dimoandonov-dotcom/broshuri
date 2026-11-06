@@ -200,7 +200,7 @@ async function renderList(){
   <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
       <div class="nm">${esc(x.supplier||"Без име на доставчик")}</div>
       <div class="muted">${x.kind==="comp"?"Компенсация":"Брошура"}${x.brochure_no?" № "+esc(x.brochure_no):""} · ${x.n_items} арт. · ${dt(x.promo_from)}–${dt(x.promo_to)}${x.has_warn?" · ⚠":""}${x.source==="email"?" · имейл":""}</div></div>
-      ${x.sent_at?`<span class="badge b-sent">Изпратена</span>`:""}<span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
+      ${x.sent_at?`<span class="badge b-sent">Изпратена</span>`:""}${x.status==="pending"?(x.ready_at?`<span class="badge b-approved">При Асен</span>`:`<span class="badge b-counter">Подготвя се</span>`):""}<span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
     ||`<div class="card muted">Няма бланки тук.</div>`}</div>`;
   $("#lo").onclick=async()=>{await post("/api/logout",{});ME=null;renderLogin()};
   app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderList()});
@@ -291,6 +291,10 @@ async function renderForm(id){
   app.innerHTML=`<div class="top"><a class="back" href="#">‹ Всички бланки</a><span class="sp"></span><a class="btn" href="#help">? Помощ</a></div>
   <div>${isOffice()?`<input class="inp h1in" id="supn" value="${esc(F.supplier||"")}" placeholder="Напиши доставчика" title="Името на доставчика - може да се поправи">`:`<h1>${esc(F.supplier||"Без име на доставчик")}</h1>`}
    <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
+  ${F.status==="pending"?(F.ready_at
+     ?`<div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="badge b-approved">При Асен</span><span class="muted">изпратена за цени ${new Date(F.ready_at).toLocaleString("bg-BG",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})}${F.ready_by?" от "+esc(NAMES[F.ready_by]||F.ready_by):""}</span>${isOffice()?`<button class="btn" id="rdy">Прати пак</button>`:""}</div>`
+     :isOffice()?`<div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:2px solid var(--pen)"><div style="flex:1;min-width:220px"><b>Бланката се подготвя.</b><br><span class="muted">Всичко, което пишеш, се записва веднага. Като провериш цените и червените полета, прати я на Асен.</span></div><button class="btn pri" id="rdy">Изпрати на Асен за цени</button></div>`
+     :`<div class="card muted">Офисът още подготвя тази бланка.</div>`):""}
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
   ${F.kzp_count?`<div class="kzpbar card" style="border:2px solid var(--kzp);background:var(--kzp-soft)" data-h="kzp"><span class="kzptag">КЗП</span>
      <span><b>${F.kzp_count}</b> арт. от списъка на КЗП - светят в синьо. Промо маржът им не може да е над регулярния.</span></div>`:""}
@@ -320,6 +324,7 @@ async function renderForm(id){
     ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
   </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 15 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`;
   app.querySelectorAll(".item input[data-k]").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  if($("#rdy"))$("#rdy").onclick=async()=>{$("#rdy").disabled=true;try{await post(`/api/forms/${F.id}/ready`,{});toast("Изпратена на Асен ✓");renderForm(F.id)}catch(e){toast(e.message);$("#rdy").disabled=false}};
   if($("#supn"))$("#supn").onchange=async()=>{await post(`/api/forms/${F.id}`,{supplier:$("#supn").value});toast("Доставчикът е записан")};
   app.querySelectorAll("[data-find]").forEach(inp=>{let t=null;inp.oninput=()=>{clearTimeout(t);const q=inp.value.trim(),box=$("#fh-"+inp.dataset.find);
     if(q.length<2){box.innerHTML="";return}
@@ -345,8 +350,9 @@ async function saveItem(inp){
   let body={};
   if(k==="pct"){if(!it.shelf||v==null){toast("Първо въведи рафтовата цена");return}body.approved=Math.round(it.shelf*(1-v/100)*100)/100}
   else if(k==="approved"&&v==null)body.clear_approved=true;
+  else if(v==null&&["base","to_pct","reg","dto_pct","promo"].includes(k))body.clear=[k];
   else{body[k]=k==="sales30"||k==="code"?Math.round(v):v;if(NET&&["base","reg","promo"].includes(k))body.net=true}
-  try{FORM=await post("/api/items/"+id,body);const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y)}catch(e){toast(e.message)}
+  try{FORM=await post("/api/items/"+id,body);const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y);toast("Записано ✓")}catch(e){toast(e.message)}
 }
 let SUPS=null, ARTS=[], PICK=new Set(), QRY="", QT=null, KZP=null;
 const matches=(a,q)=>{q=q.trim().toUpperCase();if(!q)return true;if(/^\d+$/.test(q))return String(a.code).startsWith(q);
@@ -437,7 +443,7 @@ const HELP={
  base:["Базова цена с ДДС","Цената от ценоразписа на доставчика - първата цена в неговата бланка.","3,49 €"],
  to:["Т.О. %","Търговската отстъпка по договор. Редовната доставна = базова − Т.О. Системата я смята сама.","3,49 − 10% = 3,141 €"],
  reg:["Редовна доставна","Какво плащаме на доставчика нормално, с ДДС. Пише откъде е: доставчик, офис, запомнена или Мистрал (последна доставка). Поправката се запомня за следващата брошура.","3,141 €"],
- dto:["Д.Т.О. %","Допълнителната отстъпка, която доставчикът дава за брошурата. Промо доставната = редовна − Д.Т.О. Пиши процента - цената се смята сама.","3,141 − 8% = 2,8897 €"],
+ dto:["Д.Т.О. %","Допълнителната отстъпка, която доставчикът дава за брошурата. Промо доставната = редовна − Д.Т.О. Пиши процента - цената се смята сама. Ако фирмата няма Д.Т.О., напиши 0 - тогава в бланката не искаме отстъпка. Празно поле = системата сама слага исканата Д.Т.О. за 20% марж.","3,141 − 8% = 2,8897 €"],
  promo:["Промо доставна","Какво плащаме на доставчика през периода на промо цените. Ако я напишеш, системата смята Д.Т.О. сама.","2,8897 €"],
  comp:["Компенсация/бр.","При бланка за компенсация: колко ни връща доставчикът за всяка продадена бройка. Промо доставната = редовна − компенсация.","0,702 €"],
  code:["Наш код","Кодът на артикула в Мистрал. Ако системата не го е намерила по баркода, напиши го и тя ще дотегли всичко останало.","14220"],
@@ -467,7 +473,8 @@ function renderHelp(){
      <li><b>Бланка от доставчик:</b> качи Excel-а (или снимка/PDF). Системата чете всичко сама, намира кодовете, цените на рафта и продажбите.</li>
      <li><b>Нова бланка от нас:</b> „+ Нова брошура по доставчик“ → избери доставчик (или търси артикул по име, код, баркод) → отметни артикулите → „Създай бланката“.</li>
      <li>Провери цените на доставчика. Ако имаш цени без ДДС - сложи отметката „Въвеждам цените без ДДС“.</li>
-     <li>Оправи всичко червено ⚠. Асен получава известие сам.</li>
+     <li>Оправи всичко червено ⚠. Всичко, което пишеш, се записва веднага (излиза „Записано ✓“). Ако фирмата не дава Д.Т.О., напиши <b>0</b> в Д.Т.О. - тогава системата не иска отстъпка в бланката.</li>
+     <li>Натисни <b>„Изпрати на Асен за цени“</b> - той получава съобщение в Telegram с линк към бланката.</li>
      <li>След решението на Асен: свали <b>„Бланка 6Б с цените“</b>, прати я на доставчика и натисни <b>„Отбележи изпратена“</b>.</li></ol>
      ${dl(["base","to","reg","dto","promo","comp","code","checks"])}</div>`;
   const btns=`<div class="card hdoc"><h2>Бутоните</h2><dl>
