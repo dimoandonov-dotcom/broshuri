@@ -104,7 +104,7 @@ def supkey(name: str | None) -> str:
 
 
 def remember_reg(supplier: str | None, code: int | None, reg, source: str, user: str = "",
-                 base=None, to_pct=None):
+                 base=None, to_pct=None, form_id: int | None = None):
     """Запомня базовата цена, Т.О. и редовната доставна цена на доставчика за артикула -
     ползват се в следващата му брошура."""
     if not code or reg is None or not supkey(supplier):
@@ -115,6 +115,9 @@ def remember_reg(supplier: str | None, code: int | None, reg, source: str, user:
             base=COALESCE(EXCLUDED.base, supplier_prices.base), to_pct=COALESCE(EXCLUDED.to_pct, supplier_prices.to_pct),
             source=EXCLUDED.source, updated_by=EXCLUDED.updated_by, updated_at=now()""",
          s=supkey(supplier), c=int(code), r=reg, b=base, t=to_pct, src=source, u=user)
+    db.q("""INSERT INTO price_history (supplier, code, reg, base, to_pct, form_id, source)
+            VALUES (:s, :c, :r, :b, :t, :f, :src)""",
+         s=supkey(supplier), c=int(code), r=reg, b=base, t=to_pct, f=form_id, src=source)
 
 
 def enrich_form(form_id: int) -> list[str]:
@@ -181,7 +184,7 @@ def ingest(data: bytes, name: str, ctype: str, source: str = "upload", source_fr
     db.q("UPDATE items SET reg_src='доставчик' WHERE form_id=:f AND reg IS NOT NULL", f=fid)
     for it in db.rows("SELECT code, reg, base, to_pct FROM items WHERE form_id=:f AND code IS NOT NULL AND reg IS NOT NULL",
                       f=fid):
-        remember_reg(p["supplier"], it["code"], it["reg"], "бланка от доставчика", user, it["base"], it["to_pct"])
+        remember_reg(p["supplier"], it["code"], it["reg"], "бланка от доставчика", user, it["base"], it["to_pct"], fid)
     if notes:
         w = "\n".join(filter(None, ["\n".join(p["warnings"]), *notes]))
         db.q("UPDATE forms SET warnings=:w WHERE id=:id", w=w, id=fid)
@@ -370,6 +373,14 @@ def checks(it: dict, kind: str) -> list[str]:
         if not it.get("kzp_ok_margin"):
             out.append(f"КЗП: маржът в промоцията {it['margin']:.1f}% е по-голям от регулярния {it['reg_margin']:.1f}%. "
                        f"Промо цената трябва да е най-много {it['kzp_max_price']:.2f} €.")
+    if base is not None and reg is not None and it.get("to_pct") is not None:
+        calc = base * (1 - float(it["to_pct"]) / 100)
+        if abs(calc - reg) > max(0.005, calc * 0.005):
+            out.append(f"Редовната доставна {reg:.4f} не отговаря на базова − Т.О. = {calc:.4f}. Проверете бланката на доставчика.")
+    pv = it.get("prev_reg")
+    if pv and reg is not None and abs(reg - pv) / pv > 0.01:
+        out.append(f"Редовната доставна {reg:.4f} е {'по-висока' if reg > pv else 'по-ниска'} с {abs(reg / pv - 1) * 100:.1f}% "
+                   f"от предишната бланка на доставчика ({pv:.4f}, {it['prev_at'][8:10]}.{it['prev_at'][5:7]}).")
     if not it.get("code"):
         out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода. "
                    "Потърси го по име в полето „Намери в Мистрал“ отдолу или напиши кода в „Наш код“.")
@@ -397,7 +408,7 @@ def checks(it: dict, kind: str) -> list[str]:
 
 
 SUMMARY = """SELECT f.id, f.supplier, f.kind, f.brochure_no, f.promo_from, f.promo_to, f.status, f.source,
-    f.created_at, f.decided_by, f.decided_at, f.sent_at, f.ready_at, f.returned_at,
+    f.created_at, f.decided_by, f.decided_at, f.sent_at, f.ready_at, f.returned_at, f.urgent,
     CASE WHEN f.sent_at IS NOT NULL THEN 'sent'
          WHEN f.returned_at IS NOT NULL AND (f.ready_at IS NULL OR f.returned_at >= f.ready_at) THEN 'back'
          WHEN f.ready_at IS NOT NULL THEN 'asen' ELSE 'prep' END AS stage, f.warnings IS NOT NULL AND f.warnings <> '' AS has_warn,
@@ -407,7 +418,7 @@ SUMMARY = """SELECT f.id, f.supplier, f.kind, f.brochure_no, f.promo_from, f.pro
 
 @app.get("/api/forms")
 def list_forms(user: dict = Depends(me)):
-    return db.rows(SUMMARY + " GROUP BY f.id ORDER BY (f.status='pending') DESC, f.created_at DESC LIMIT 300")
+    return db.rows(SUMMARY + " GROUP BY f.id ORDER BY f.urgent DESC, (f.status='pending') DESC, f.created_at DESC LIMIT 300")
 
 
 @app.get("/api/forms/{fid}")
@@ -417,6 +428,17 @@ def get_form(fid: int, user: dict = Depends(me)):
         raise HTTPException(404, "Няма такава бланка.")
     f.pop("file_data", None)
     items = db.rows("SELECT * FROM items WHERE form_id=:f ORDER BY pos", f=fid)
+    codes = [it["code"] for it in items if it["code"]]
+    prev = {}
+    if codes:
+        for r in db.rows("""SELECT DISTINCT ON (code) code, reg, base, to_pct, at, form_id FROM price_history
+                            WHERE supplier=:s AND code = ANY(:c) AND COALESCE(form_id, -1) <> :f
+                            ORDER BY code, at DESC""", s=supkey(f.get("supplier")), c=codes, f=fid):
+            prev[r["code"]] = r
+    for it in items:
+        pr = prev.get(it["code"])
+        it["prev_reg"] = float(pr["reg"]) if pr else None
+        it["prev_at"] = pr["at"].date().isoformat() if pr else None
     kz = kzp.lookup([it["code"] for it in items])
     acts = {}
     if kz:
@@ -443,6 +465,7 @@ class Decision(BaseModel):
     fmt: str | None = None
     note: str | None = None
     supplier: str | None = None
+    urgent: bool | None = None
 
 
 @app.post("/api/forms/{fid}")
@@ -454,6 +477,8 @@ def update_form(fid: int, p: Decision, user: dict = Depends(me)):
             raise HTTPException(400, "Непознато решение.")
         db.q("UPDATE forms SET status=:s, decided_by=:u, decided_at=now() WHERE id=:id",
              s=p.status, u=user["user"], id=fid)
+    if p.urgent is not None:
+        db.q("UPDATE forms SET urgent=:v WHERE id=:id", v=p.urgent, id=fid)
     for k in ("fmt", "note", "supplier"):
         v = getattr(p, k)
         if v is not None:
@@ -489,7 +514,9 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
     for k in ("approved", "shelf", "code", "sales30", "item_note"):
         v = getattr(p, k)
         if v is not None:
-            db.q(f"UPDATE items SET {k}=:v WHERE id=:id", v=v, id=iid)
+            db.q(f"UPDATE items SET {k}=:v WHERE id=:id", v=(v.strip() or None) if k == "item_note" else v, id=iid)
+    if p.item_note is not None:
+        db.q("UPDATE items SET note_by=:u WHERE id=:id", u=user["user"], id=iid)
     # цени от доставчика, въведени от офиса: базова -> (Т.О.) -> редовна -> (Д.Т.О.) -> промо доставна
     prices = {k: getattr(p, k) for k in ("base", "to_pct", "reg", "dto_pct", "promo") if getattr(p, k) is not None}
     cl = [k for k in p.clear if k in ("base", "to_pct", "reg", "dto_pct", "promo")]
@@ -516,7 +543,7 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
                 reg_src='офис', dto_src=CASE WHEN :dc THEN 'офис' ELSE dto_src END WHERE id=:id""",
              id=iid, dc=("dto_pct" in prices or "promo" in prices), **v)
         row = db.one("""SELECT f.supplier, i.code FROM items i JOIN forms f ON f.id=i.form_id WHERE i.id=:id""", id=iid)
-        remember_reg(row["supplier"], row["code"], v["reg"], "поправена", user["user"], v["base"], v["to_pct"])
+        remember_reg(row["supplier"], row["code"], v["reg"], "поправена", user["user"], v["base"], v["to_pct"], it["form_id"])
     if p.code is not None:
         enrich_form(it["form_id"])
         if not db.one("SELECT 1 AS x FROM items WHERE form_id=:f AND code IS NULL", f=it["form_id"]):
@@ -537,6 +564,39 @@ async def refresh(fid: int, user: dict = Depends(me)):
     return f
 
 
+class AddItem(BaseModel):
+    code: int
+    copy_from: int | None = None   # ред, от който да се копират цените на доставчика
+
+
+@app.post("/api/forms/{fid}/items")
+async def add_item(fid: int, p: AddItem, user: dict = Depends(need("office"))):
+    """Добавя артикул към бланката (напр. „Луканка и суджук“ на един ред в бланката на доставчика)."""
+    from . import minmax
+    if not db.one("SELECT id FROM forms WHERE id=:f", f=fid):
+        raise HTTPException(404, "Няма такава бланка.")
+    pos = (db.one("SELECT COALESCE(MAX(pos), 0) AS m FROM items WHERE form_id=:f", f=fid) or {}).get("m", 0) + 1
+    src = db.one("SELECT * FROM items WHERE id=:i AND form_id=:f", i=p.copy_from, f=fid) if p.copy_from else None
+    name = minmax.names([p.code]).get(p.code) or str(p.code)
+    db.q("""INSERT INTO items (form_id, pos, name, code, saft, base, to_pct, reg, dto_pct, promo, comp, reg_src, item_note, note_by)
+            VALUES (:f, :pos, :n, :c, :saft, :base, :to, :reg, :dto, :promo, :comp, :rs, :note, :u)""",
+         f=fid, pos=pos, n=name, c=p.code, saft=src and src["saft"], base=src and src["base"], to=src and src["to_pct"],
+         reg=src and src["reg"], dto=src and src["dto_pct"], promo=src and src["promo"], comp=src and src["comp"],
+         rs=src and src["reg_src"], note=f"Добавен от офиса{' (цените като на ' + (src['name'] or '') + ')' if src else ''}",
+         u=user["user"])
+    await run_in_threadpool(enrich_form, fid)
+    return get_form(fid, user)
+
+
+@app.delete("/api/items/{iid}")
+def delete_item(iid: int, user: dict = Depends(need("office"))):
+    it = db.one("SELECT form_id FROM items WHERE id=:id", id=iid)
+    if not it:
+        raise HTTPException(404, "Няма такъв ред.")
+    db.q("DELETE FROM items WHERE id=:id", id=iid)
+    return get_form(it["form_id"], user)
+
+
 @app.post("/api/forms/{fid}/ready")
 def mark_ready(fid: int, user: dict = Depends(need("office"))):
     """Офисът е проверил бланката - отива при Асен (Telegram с линк)."""
@@ -545,7 +605,7 @@ def mark_ready(fid: int, user: dict = Depends(need("office"))):
     n_chk = sum(len(it["checks"]) for it in f["items"])
     kz = f.get("kzp_count") or 0
     url = f"{extras.PUBLIC_URL}/#f{fid}" if extras.PUBLIC_URL else ""
-    push.send(approvers(), f"Брошура за цени: {f['supplier'] or 'доставчик'}",
+    push.send(approvers(), ("🔴 СПЕШНО · " if f.get("urgent") else "") + f"Брошура за цени: {f['supplier'] or 'доставчик'}",
               f"{len(f['items'])} арт." + (f", {kz} от КЗП" if kz else "") + (f", {n_chk} за проверка" if n_chk else "")
               + f" · подготви {user['user']}", f"/#f{fid}")
     return get_form(fid, user)
@@ -751,5 +811,8 @@ async def _start():
     db.init()
     kzp.init()
     push.init()
+    db.q("""INSERT INTO price_history (supplier, code, reg, base, to_pct, source, at)
+            SELECT supplier, code, reg, base, to_pct, source, updated_at FROM supplier_prices
+            WHERE NOT EXISTS (SELECT 1 FROM price_history)""")
     if os.getenv("IMAP_HOST"):
         asyncio.create_task(_mail_loop())

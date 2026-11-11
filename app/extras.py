@@ -334,6 +334,11 @@ def blank_xlsx(form: dict, items: list[dict]) -> bytes:
         put(f"A{r}", f"В червено: искана от КУПУВАЧА промоционална доставна цена и Д.Т.О.% (минимален марж "
                      f"{float(items[0].get('min_margin') or 20):.0f}% при одобрената цена на рафта).",
             F(size=8, bold=True, italic=True, color="C0193F"), L, None, f"K{r}")
+    notes = [(it.get("m_name") or it["name"], it["item_note"]) for it in items
+             if it.get("item_note") and not str(it["item_note"]).startswith("Добавен от офиса")]
+    for nm, nt in notes:
+        r += 1
+        put(f"A{r}", f"{nm}: {nt}", F(size=9, italic=True), L, None, f"K{r}")
     if form.get("note"):
         r += 1
         put(f"A{r}", f"Бележка от КУПУВАЧА: {form['note']}", F(size=9, bold=True, color="C0193F"), L, None, f"K{r}")

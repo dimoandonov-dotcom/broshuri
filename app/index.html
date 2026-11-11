@@ -95,6 +95,12 @@ h1 span{color:var(--pen)}
 .tour-card .dots i.on{background:var(--pen)}
 .tour-block{position:fixed;inset:0;z-index:39}
 @media (prefers-reduced-motion:reduce){.tour-hole,.tour-card{transition:none;animation:none}}
+.badge.urg{background:var(--bad);color:#fff}
+.lnk{background:none;border:0;padding:4px 0;font:inherit;font-size:.8rem;font-weight:600;color:var(--pen);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.rowtools{display:flex;gap:4px 16px;flex-wrap:wrap}
+.info{display:flex;gap:4px 16px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.info b{color:var(--fg)}
+.fld.note textarea{width:100%;min-height:38px;resize:none;font-size:.9rem;line-height:1.4}
 .grp{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--pen);font-weight:700;margin-top:2px}
 .mg{margin-left:auto;text-align:right;min-width:80px}
 .mg .v{font-family:var(--f-m);font-weight:600}
@@ -222,10 +228,10 @@ async function renderList(){
   <div class="chips">${(asen?[["asen","За мен"],["back","Върнати на офиса"],["prep","При офиса"],["sent","Изпратени"],["all","Всички"]]
       :[["prep","Подготовка"],["asen","При Асен"],["back","Върнати от Асен"],["sent","Изпратени"],["all","Всички"]])
     .map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${FILTER===k}">${l} · ${cnt(k)}</button>`).join("")}</div>
-  <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}"><div class="g">
+  <div class="list">${shown.map(x=>`<a class="card row-f" href="#f${x.id}" ${x.urgent&&x.stage!=="sent"?'style="border:2px solid var(--bad)"':""}><div class="g">
       <div class="nm">${esc(x.supplier||"Без име на доставчик")}</div>
       <div class="muted">${x.kind==="comp"?"Компенсация":"Брошура"}${x.brochure_no?" № "+esc(x.brochure_no):""} · ${x.n_items} арт. · ${dt(x.promo_from)}–${dt(x.promo_to)}${x.has_warn?" · ⚠":""}${x.source==="email"?" · имейл":""}</div></div>
-      <span class="badge ${STG[x.stage][1]}">${STG[x.stage][0]}</span><span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
+      ${x.urgent&&x.stage!=="sent"?`<span class="badge urg">🔴 СПЕШНО</span>`:""}<span class="badge ${STG[x.stage][1]}">${STG[x.stage][0]}</span><span class="badge ${ST[x.status][1]}">${ST[x.status][0]}</span></a>`).join("")
     ||`<div class="card muted">Няма бланки тук.</div>`}</div>`;
   drawPush().then(()=>maybeTour("list"));setBadge(cnt(asen?"asen":"back"));
   $("#lo").onclick=async()=>{await post("/api/logout",{});ME=null;renderLogin()};
@@ -299,13 +305,17 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
       ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
-    ${it.code||!isOffice()?"":`<div class="find"><label class="grp" for="fs-${it.id}">Намери в Мистрал</label>
-      <input class="inp search" id="fs-${it.id}" data-find="${it.id}" type="search" placeholder="Име, код или баркод - напр. ${esc((it.name||"").split(/\s+/).slice(0,2).join(" ").toLowerCase())}" autocomplete="off">
+    ${!isOffice()?"":`<div class="info">${it.m_delivery!=null?`<span>Последна доставка (Мистрал) <b>${f(it.m_delivery,4)}</b>${it.m_delivery_date?` · ${dt(it.m_delivery_date)}`:""}</span>`:""}${it.prev_reg!=null?`<span>Предишна бланка <b>${f(it.prev_reg,4)}</b> · ${dt(it.prev_at)}</span>`:""}</div>
+    <div class="rowtools">${it.code?`<button type="button" class="lnk" data-tgl="${it.id}" data-mode="set">Смени артикула</button>`:""}<button type="button" class="lnk" data-tgl="${it.id}" data-mode="add">+ Още артикул със същите цени</button><button type="button" class="lnk g-bad" data-delrow="${it.id}">Махни реда</button></div>
+    <div class="find" id="fw-${it.id}" ${it.code?"hidden":""}><label class="grp" for="fs-${it.id}" id="fl-${it.id}">Намери в Мистрал</label>
+      <input class="inp search" id="fs-${it.id}" data-find="${it.id}" data-mode="set" type="search" placeholder="Име, код или баркод - напр. ${esc((it.name||"").split(/\s+/).slice(0,2).join(" ").toLowerCase())}" autocomplete="off">
       <div class="fhits" id="fh-${it.id}"></div></div>`}
     <div style="display:none">
     </div>
     <div class="prices">${fund}</div>
     ${buyer}`}
+    <div class="fld note"><label for="nt-${it.id}">Бележка за артикула${it.note_by?` <span style="text-transform:none">· ${esc(NAMES[it.note_by]||it.note_by)}</span>`:""}</label>
+      <textarea id="nt-${it.id}" data-k="item_note" rows="1" placeholder="Напр. „искат го само в А4“, „нов вкус“, „без Д.Т.О. - компенсация“">${esc(it.item_note||"")}</textarea></div>
     </div>`;
 }
 async function renderForm(id){
@@ -318,8 +328,8 @@ async function renderForm(id){
   <div>${isOffice()?`<input class="inp h1in" id="supn" value="${esc(F.supplier||"")}" placeholder="Напиши доставчика" title="Името на доставчика - може да се поправи">`:`<h1>${esc(F.supplier||"Без име на доставчик")}</h1>`}
    <div class="muted">${F.kind==="comp"?"Компенсация за продадена бройка":"Рекламна брошура"}${F.brochure_no?" № "+esc(F.brochure_no):""} · промоция ${dt(F.promo_from)}–${dt(F.promo_to)} · цени ${dt(F.price_from)}–${dt(F.price_to)} · ${reg}</div></div>
   ${F.status==="pending"?(F.ready_at
-     ?`<div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="badge b-approved">При Асен</span><span class="muted">изпратена за цени ${new Date(F.ready_at).toLocaleString("bg-BG",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})}${F.ready_by?" от "+esc(NAMES[F.ready_by]||F.ready_by):""}</span>${isOffice()?`<button class="btn" id="rdy">Прати пак</button>`:""}</div>`
-     :isOffice()?`<div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:2px solid var(--pen)"><div style="flex:1;min-width:220px"><b>Бланката се подготвя.</b><br><span class="muted">Всичко, което пишеш, се записва веднага. Като провериш цените и червените полета, прати я на Асен.</span></div><button class="btn pri" id="rdy">Изпрати на Асен за цени</button></div>`
+     ?`<div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="badge b-approved">При Асен</span><span class="muted">изпратена за цени ${new Date(F.ready_at).toLocaleString("bg-BG",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})}${F.ready_by?" от "+esc(NAMES[F.ready_by]||F.ready_by):""}</span>${F.urgent?`<span class="badge urg">🔴 СПЕШНО</span>`:""}${isOffice()?`<button class="btn" id="urgt">${F.urgent?"Не е спешно":"🔴 Отбележи спешно"}</button><button class="btn" id="rdy">Прати пак</button>`:""}</div>`
+     :isOffice()?`<div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:2px solid var(--pen)"><div style="flex:1;min-width:220px"><b>Бланката се подготвя.</b><br><span class="muted">Всичко, което пишеш, се записва веднага. Като провериш цените и червените полета, прати я на Асен.</span></div><label style="display:flex;gap:6px;align-items:center;font-weight:700;color:var(--bad)"><input type="checkbox" id="urg" ${F.urgent?"checked":""} style="width:18px;height:18px"> 🔴 Спешно</label><button class="btn pri" id="rdy">Изпрати на Асен за цени</button></div>`
      :`<div class="card muted">Офисът още подготвя тази бланка.</div>`):""}
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
   ${F.kzp_count?`<div class="kzpbar card" style="border:2px solid var(--kzp);background:var(--kzp-soft)" data-h="kzp"><span class="kzptag">КЗП</span>
@@ -332,6 +342,9 @@ async function renderForm(id){
    <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l" data-h="avgmargin">среден марж <i class="q">?</i></div></div>
    <div class="stat"><div class="n">${f(tot,0)} €</div><div class="l" data-h="funded">доплащаме <i class="q">?</i></div></div></div>
   <div class="card">${it.map(x=>itemHTML(x,F.kind)).join("")}</div>
+  ${isOffice()?`<div class="card find"><label class="grp" for="fs-new">+ Добави артикул към бланката</label>
+    <input class="inp search" id="fs-new" data-find="new" data-mode="add" type="search" placeholder="Име, код или баркод - напр. суджук кен" autocomplete="off">
+    <div class="fhits" id="fh-new"></div></div>`:""}
   <div class="card dec">
     <div class="r"><label class="muted" for="fmt">Формат</label><select id="fmt" ${canDecide()?"":"disabled"}>${["","Единично каре","А5","А4","Брошура"].map(o=>`<option ${o===(F.fmt||"")?"selected":""}>${o}</option>`).join("")}</select>
       ${F.wanted_format?`<span class="muted">Искат: ${esc(F.wanted_format)}</span>`:""}</div>
@@ -352,8 +365,17 @@ async function renderForm(id){
     ${isOffice()?(F.sent_at?`<span class="badge b-sent">Изпратена ${dt(F.sent_at)}</span>`:`<button class="btn" id="sent" ${F.status==="pending"?"disabled":""}>Отбележи изпратена</button>`):""}
     ${isOffice()?`<button class="btn" id="del">Изтрий</button>`:""}
   </div><div class="muted">* Доплащаме = свалената рафтова цена минус отстъпката на доставчика, по продажбите за 15 дни.${F.source==="email"?" Дошла по имейл от "+esc(F.source_from||""):""}</div></div>`}`;
-  app.querySelectorAll(".item input[data-k]").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  app.querySelectorAll(".item [data-k]").forEach(inp=>inp.onchange=()=>saveItem(inp));
+  app.querySelectorAll("[data-tgl]").forEach(b=>b.onclick=()=>{const id=b.dataset.tgl,w=$("#fw-"+id),inp=$("#fs-"+id),same=w.dataset.open===b.dataset.mode;
+    w.hidden=same&&!w.hidden;w.dataset.open=w.hidden?"":b.dataset.mode;inp.dataset.mode=b.dataset.mode;
+    $("#fl-"+id).textContent=b.dataset.mode==="add"?"Добави още артикул със същите цени на доставчика":"Смени с друг артикул от Мистрал";
+    if(!w.hidden)inp.focus()});
+  app.querySelectorAll("[data-delrow]").forEach(b=>{let armed=false;b.onclick=async()=>{if(!armed){armed=true;b.textContent="Сигурна ли си? Натисни пак";return}
+    try{FORM=await api("/api/items/"+b.dataset.delrow,{method:"DELETE"});const y=window.scrollY;await renderForm(F.id);window.scrollTo(0,y);toast("Редът е махнат")}catch(e){toast(e.message)}}});
+  app.querySelectorAll(".note textarea").forEach(t=>{const fit=()=>{t.style.height="auto";t.style.height=t.scrollHeight+"px"};fit();t.oninput=fit});
   if($("#ret"))$("#ret").onclick=async()=>{$("#ret").disabled=true;try{await post(`/api/forms/${F.id}/return`,{});toast("Записано и върнато към Габи ✓");FILTER=null;location.hash=""}catch(e){toast(e.message);$("#ret").disabled=false}};
+  if($("#urg"))$("#urg").onchange=()=>post(`/api/forms/${F.id}`,{urgent:$("#urg").checked}).then(()=>toast($("#urg").checked?"Отбелязана като спешна":"Не е спешна"));
+  if($("#urgt"))$("#urgt").onclick=async()=>{await post(`/api/forms/${F.id}`,{urgent:!F.urgent});toast(!F.urgent?"Отбелязана като спешна - Асен я вижда най-горе":"Не е спешна");renderForm(F.id)};
   if($("#rdy"))$("#rdy").onclick=async()=>{$("#rdy").disabled=true;try{await post(`/api/forms/${F.id}/ready`,{});toast("Изпратена на Асен ✓");renderForm(F.id)}catch(e){toast(e.message);$("#rdy").disabled=false}};
   if($("#supn"))$("#supn").onchange=async()=>{await post(`/api/forms/${F.id}`,{supplier:$("#supn").value});toast("Доставчикът е записан")};
   app.querySelectorAll("[data-find]").forEach(inp=>{let t=null;inp.oninput=()=>{clearTimeout(t);const q=inp.value.trim(),box=$("#fh-"+inp.dataset.find);
@@ -363,7 +385,9 @@ async function renderForm(id){
         <div class="prices"><span class="code">${a.code}</span><span><b>${a.sales30}</b> бр./15 д.</span><span>${esc(a.supplier||"")}</span></div></div><span class="badge b-approved">Това е</span></button>`).join("")
         :`<div class="muted">Няма такъв артикул в Мистрал.</div>`;
       box.querySelectorAll("[data-code]").forEach(b=>b.onclick=async()=>{toast("Зареждам от Мистрал…");
-        try{FORM=await post("/api/items/"+inp.dataset.find,{code:+b.dataset.code});const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y);toast("Кодът е записан")}catch(e){toast(e.message)}});
+        try{const add=inp.dataset.mode==="add",id=inp.dataset.find;
+          FORM=add?await post(`/api/forms/${F.id}/items`,{code:+b.dataset.code,copy_from:id==="new"?null:+id}):await post("/api/items/"+id,{code:+b.dataset.code});
+          const y=window.scrollY;await renderForm(FORM.id);window.scrollTo(0,y);toast(add?"Артикулът е добавен ✓":"Кодът е записан ✓")}catch(e){toast(e.message)}});
     },300)}});
   if($("#net"))$("#net").onchange=()=>{NET=$("#net").checked;try{localStorage.setItem("br_net",NET?"1":"0")}catch(e){}const y=window.scrollY;renderForm(F.id).then(()=>window.scrollTo(0,y))};
   app.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{
@@ -377,7 +401,8 @@ async function renderForm(id){
   maybeTour("form");
 }
 async function saveItem(inp){
-  const id=inp.closest(".item").dataset.id, k=inp.dataset.k, v=num(inp.value), it=FORM.items.find(x=>x.id==id);
+  const id=inp.closest(".item").dataset.id, k=inp.dataset.k, v=k==="item_note"?null:num(inp.value), it=FORM.items.find(x=>x.id==id);
+  if(k==="item_note"){try{FORM=await post("/api/items/"+id,{item_note:inp.value});toast("Бележката е записана ✓")}catch(e){toast(e.message)}return}
   let body={};
   if(k==="pct"){if(!it.shelf||v==null){toast("Първо въведи рафтовата цена");return}body.approved=Math.round(it.shelf*(1-v/100)*100)/100}
   else if(k==="approved"&&v==null)body.clear_approved=true;
