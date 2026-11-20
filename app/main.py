@@ -731,6 +731,20 @@ async def columns(table: str, code: int | None = None, user: dict = Depends(need
     return await run_in_threadpool(run)
 
 
+@app.get("/api/admin/deliveries")
+async def adm_deliveries(code: int, days: int = 120, user: dict = Depends(need())):
+    def run():
+        with mistral.connect("varna") as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT TOP 60 LOCATIONID AS loc, OPERATIONDATE AS d, OPERATIONTYPE AS t, QTY AS q, PRICE AS p,
+                                  LASTDELIVERYPRICE AS lp, AVGDELIVERYPRICE AS ap
+                           FROM MATERIALQTYLOG WITH (NOLOCK)
+                           WHERE MATERIALCODE = %s AND OPERATIONTYPE IN (2, 24) AND OPERATIONDATE >= DATEADD(day, -%s, GETDATE())
+                           ORDER BY OPERATIONDATE DESC""", (code, days))
+            return [{k: str(v) for k, v in r.items()} for r in cur.fetchall()]
+    return await run_in_threadpool(run)
+
+
 @app.post("/api/mail/check")
 async def mail_now(user: dict = Depends(need("office"))):
     return {"new": await run_in_threadpool(extras.poll_mail, ingest)}
