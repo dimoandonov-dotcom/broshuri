@@ -68,21 +68,24 @@ def _info(cur, codes: list[int]) -> dict[int, dict]:
         return {}
     cl = _ints(codes)
     info: dict[int, dict] = {c: {"prices": []} for c in codes}
-    cur.execute(f"""SELECT MATERIALCODE AS code, MAX(MATERIAL) AS name, MAX(AVGDELIVERYPRICE) AS avgp
+    cur.execute(f"""SELECT MATERIALCODE AS code, MAX(MATERIAL) AS name
                     FROM MATERIAL WITH (NOLOCK) WHERE MATERIALCODE IN ({cl}) GROUP BY MATERIALCODE""")
     for r in cur.fetchall():
-        info[int(r["code"])].update(name=r["name"], avg_delivery=float(r["avgp"] or 0) or None)
+        info[int(r["code"])].update(name=r["name"])
     # последната доставка: редът с най-нова дата (не MAX на цената - стари обекти пазят стари цени),
     # с ДДС и без ДДС -> от тях и ставката на ДДС за артикула
     cur.execute(f"""SELECT MATERIALCODE AS code, LASTDELIVERYDATE AS d, LASTDELIVERYPRICE AS p,
-                           LASTDELIVERYPRICEWOTAX AS pn, TAXGROUPID AS tg
+                           LASTDELIVERYPRICEWOTAX AS pn, TAXGROUPID AS tg, AVGDELIVERYPRICEWOTAX AS an
                     FROM MATERIAL WITH (NOLOCK)
                     WHERE MATERIALCODE IN ({cl}) AND LASTDELIVERYPRICE > 0 AND LASTDELIVERYPRICEWOTAX > 0""")
     best: dict[int, dict] = {}
     tg_rate: dict = {}
     rates: dict[int, list] = {}
+    avgs: dict[int, list] = {}
     for r in cur.fetchall():
         code = int(r["code"])
+        if r["an"] and float(r["an"]) > 0:
+            avgs.setdefault(code, []).append((r["d"], float(r["an"])))
         p, pn = float(r["p"]), float(r["pn"])
         rate = min((0, 9, 20), key=lambda x: abs((p / pn - 1) * 100 - x))
         tg_rate.setdefault(r["tg"], rate)
@@ -93,6 +96,13 @@ def _info(cur, codes: list[int]) -> dict[int, dict]:
         # ставката: най-честата ненулева по всички обекти (вътрешни трансфери от склада понякога са без ДДС)
         nz = [x for x in rates.get(code, []) if x]
         vat = max(set(nz), key=nz.count) if nz else 0
+        # средна покупна цена: медиана на средните цени без ДДС по обектите, заредени последните 90 дни
+        rows = avgs.get(code, [])
+        recent = [a for d, a in rows if d and b["d"] and (b["d"] - d).days <= 90] or [a for _, a in rows]
+        if recent:
+            recent.sort()
+            m = recent[len(recent) // 2] if len(recent) % 2 else (recent[len(recent) // 2 - 1] + recent[len(recent) // 2]) / 2
+            info[code].update(avg_delivery=round(m * (1 + vat / 100), 4), avg_delivery_net=round(m, 4), avg_n=len(recent))
         info[code].update(last_delivery=round(b["p"] if b["rate"] or not vat else b["pn"] * (1 + vat / 100), 4),
                           last_delivery_net=round(b["pn"], 4), vat=vat,
                           last_delivery_date=b["d"].date().isoformat() if b["d"] else None)

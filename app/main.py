@@ -153,8 +153,9 @@ def enrich_form(form_id: int) -> list[str]:
                 if mem:
                     db.q("""UPDATE items SET reg=:v, base=COALESCE(base, :b), to_pct=COALESCE(to_pct, :t),
                             reg_src='запомнена' WHERE id=:id""", v=mem["reg"], b=mem["base"], t=mem["to_pct"], id=r["id"])
-                elif r.get("last_delivery"):
-                    db.q("UPDATE items SET reg=:v, reg_src='Мистрал' WHERE id=:id", v=r["last_delivery"], id=r["id"])
+                elif r.get("avg_delivery") or r.get("last_delivery"):
+                    db.q("UPDATE items SET reg=:v, reg_src='Мистрал (средна покупна)' WHERE id=:id",
+                         v=r.get("avg_delivery") or r["last_delivery"], id=r["id"])
         db.q("""UPDATE items SET code=:code, m_name=COALESCE(:m_name, m_name), shelf=COALESCE(:shelf, shelf),
                 avg_delivery=:avg_delivery, sales30=:sales30, sales30_varna=:sv, sales30_sofia=:ss,
                 enriched_at=now() WHERE id=:id""",
@@ -384,14 +385,18 @@ def checks(it: dict, kind: str) -> list[str]:
     if not it.get("code"):
         out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода. "
                    "Потърси го по име в полето „Намери в Мистрал“ отдолу или напиши кода в „Наш код“.")
-    if reg and md:
-        net = md / (1 + vat / 100)
+    avg = n("avg_delivery") or md
+    if reg and avg:
+        net = avg / (1 + vat / 100)
+        diff = (reg / avg - 1) * 100
         if abs(reg - net) / net < 0.06 and vat:
-            out.append(f"Редовната цена {reg:.4f} изглежда БЕЗ ДДС (последна доставка без ДДС {net:.4f}). "
+            out.append(f"Редовната цена {reg:.4f} изглежда БЕЗ ДДС (средна покупна без ДДС {net:.4f}). "
                        f"С ДДС {vat:.0f}% е {reg * (1 + vat / 100):.4f}.")
-        elif abs(reg - md) / md > 0.10:
-            out.append(f"Редовната цена се различава с {(reg / md - 1) * 100:+.0f}% от последната доставка "
-                       f"({md:.4f} € с ДДС{', ' + str(it.get('m_delivery_date')) if it.get('m_delivery_date') else ''}).")
+        elif diff > 1:
+            out.append(f"ВДИГНАТА ЦЕНА: в бланката редовната е {reg:.4f}, а средната ни покупна цена в Мистрал е "
+                       f"{avg:.4f} (+{diff:.1f}%). Доставчикът е вдигнал договорената цена - проверете.")
+        elif diff < -10:
+            out.append(f"Редовната цена {reg:.4f} е с {abs(diff):.0f}% под средната покупна ({avg:.4f}) - проверете дали е вярна.")
     if base is not None and reg is not None and base + 1e-6 < reg:
         out.append("Базовата цена е по-ниска от редовната доставна.")
     if kind != "comp" and promo is not None and reg is not None and promo > reg + 1e-6:

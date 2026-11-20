@@ -305,7 +305,7 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
       ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
-    ${!isOffice()?"":`<div class="info">${it.m_delivery!=null?`<span>Последна доставка (Мистрал) <b>${f(it.m_delivery,4)}</b>${it.m_delivery_date?` · ${dt(it.m_delivery_date)}`:""}</span>`:""}${it.prev_reg!=null?`<span>Предишна бланка <b>${f(it.prev_reg,4)}</b> · ${dt(it.prev_at)}</span>`:""}</div>
+    ${!isOffice()?"":`<div class="info">${it.avg_delivery!=null?`<span data-h="avgdel">Средна покупна (Мистрал) <b class="${it.reg!=null&&it.reg>it.avg_delivery*1.01?"g-bad":""}">${f(it.avg_delivery,4)}</b></span>`:""}${it.m_delivery!=null?`<span>Последна доставка <b>${f(it.m_delivery,4)}</b>${it.m_delivery_date?` · ${dt(it.m_delivery_date)}`:""}</span>`:""}${it.prev_reg!=null?`<span>Предишна бланка <b>${f(it.prev_reg,4)}</b> · ${dt(it.prev_at)}</span>`:""}</div>
     <div class="rowtools">${it.code?`<button type="button" class="lnk" data-tgl="${it.id}" data-mode="set">Смени артикула</button>`:""}<button type="button" class="lnk" data-tgl="${it.id}" data-mode="add">+ Още артикул със същите цени</button><button type="button" class="lnk g-bad" data-delrow="${it.id}">Махни реда</button></div>
     <div class="find" id="fw-${it.id}" ${it.code?"hidden":""}><label class="grp" for="fs-${it.id}" id="fl-${it.id}">Намери в Мистрал</label>
       <input class="inp search" id="fs-${it.id}" data-find="${it.id}" data-mode="set" type="search" placeholder="Име, код или баркод - напр. ${esc((it.name||"").split(/\s+/).slice(0,2).join(" ").toLowerCase())}" autocomplete="off">
@@ -483,6 +483,7 @@ function drawArts(){
 }
 // ---------- помощ: какво е всяко число (пример: Bolgare Мерло от брошура 304) ----------
 const HELP={
+ avgdel:["Средна покупна цена","Средната цена, на която реално купуваме артикула (от Мистрал, с ДДС - медиана по магазините, заредени последните 90 дни). Ако редовната доставна в бланката е по-висока с над 1%, значи доставчикът е вдигнал договорената цена - излиза в червено „ВДИГНАТА ЦЕНА“.","Хляб България: средна 0,8500 €"],
  kzp:["КЗП","Артикулите от списъка на КЗП (файлът в папка КЗП в Drive) светят в синьо. За тях:<br>1. Маржът в промоцията не може да е по-голям от регулярния марж - може да е равен или по-малък. Системата показва най-високата позволена промо цена.<br>2. Ако артикулът е бил на каквато и да е активация в последните 30 дни преди началото на брошурата (15 дни за кисело мляко, прясно мляко и хляб) - не може да влезе в брошурата и свети в червено.","Регулярен марж 25,2% → промо марж най-много 25,2%"],
  shelf:["Рафт сега","Цената, на която артикулът се продава в магазина днес. Идва от Мистрал (основната ценова листа).","Bolgare Мерло: 4,20 €"],
  approved:["Промо рафт","Цената в брошурата - тя е решението на Асен. Пише се с ДДС, както ще е на етикета.","4,20 € → 3,36 €"],
