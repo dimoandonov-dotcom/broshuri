@@ -164,3 +164,19 @@ def search(q: str, supplier: str | None = None, limit: int = 40) -> list[dict]:
                     FROM sa_articles a LEFT JOIN sa_sales s ON s.code = a.code AND s.day > :d
                     WHERE {' AND '.join(where)} GROUP BY a.code, a.name, a.supplier
                     ORDER BY q DESC LIMIT :lim"""), params)]
+
+
+def promo_windows(codes: list[int], days: int = 200) -> dict[int, list[tuple]]:
+    """Периодите на брошурите (тип 1, поне 3 дни) по артикул: [(начало, край)], най-новите първи."""
+    eng = engine()
+    codes = sorted({int(c) for c in codes if c})
+    if not eng or not codes:
+        return {}
+    from datetime import date
+    out: dict[int, list[tuple]] = {}
+    with eng.connect() as c:
+        for code, s, e in c.execute(text("""SELECT DISTINCT code, start_day, end_day FROM sa_promo
+                WHERE code = ANY(:c) AND COALESCE(tp, 1) = 1 AND end_day - start_day >= 3 AND end_day >= :since
+                ORDER BY start_day DESC"""), {"c": codes, "since": date.today() - timedelta(days=days)}):
+            out.setdefault(int(code), []).append((s, e))
+    return out

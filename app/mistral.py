@@ -171,3 +171,20 @@ def enrich(items: list[dict]) -> tuple[list[dict], list[str]]:
     if miss:
         notes.append(f"{miss} арт. без код в Мистрал - намери ги по име на реда (полето „Намери в Мистрал“).")
     return out, notes
+
+
+def deliveries(codes: list[int], days: int = 150) -> dict[int, list[tuple]]:
+    """Доставките (вид 2, количество > 0) по артикул за последните `days` дни: [(дата, цена с ДДС)]. Само Варна."""
+    codes = sorted({int(c) for c in codes if c})
+    if not codes or "varna" not in regions():
+        return {}
+    out: dict[int, list[tuple]] = {}
+    with connect("varna") as conn:
+        cur = conn.cursor()
+        cur.execute(f"""SELECT MATERIALCODE AS code, OPERATIONDATE AS d, PRICE AS p
+                        FROM MATERIALQTYLOG WITH (NOLOCK)
+                        WHERE MATERIALCODE IN ({_ints(codes)}) AND OPERATIONTYPE = 2 AND QTY > 0 AND PRICE > 0
+                          AND OPERATIONDATE >= DATEADD(day, -%s, GETDATE())""", (days,))
+        for r in cur.fetchall():
+            out.setdefault(int(r["code"]), []).append((r["d"].date(), float(r["p"])))
+    return out

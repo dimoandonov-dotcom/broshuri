@@ -120,6 +120,39 @@ def remember_reg(supplier: str | None, code: int | None, reg, source: str, user:
          s=supkey(supplier), c=int(code), r=reg, b=base, t=to_pct, f=form_id, src=source)
 
 
+def _median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    return None if not n else (xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2)
+
+
+def purchase_prices(codes: list[int]) -> dict[int, dict]:
+    """Реални покупни цени от доставките в Мистрал: редовна (извън брошурите, последните 120 дни)
+    и промо (в последната брошура). Промо цените важат от 7 дни преди до 7 дни след брошурата."""
+    from datetime import date, timedelta as td
+    from . import minmax
+    try:
+        dl = mistral.deliveries(codes, 150)
+        win = minmax.promo_windows(codes, 200)
+    except Exception as e:  # noqa: BLE001
+        print("purchase_prices:", e, flush=True)
+        return {}
+    out = {}
+    cut = date.today() - td(days=120)
+    for code, rows in dl.items():
+        ws = [(s - td(days=7), e + td(days=7), s, e) for s, e in win.get(code, [])]
+        inside = lambda d: next((w for w in ws if w[0] <= d <= w[1]), None)  # noqa: E731
+        reg = [p for d, p in rows if d >= cut and not inside(d)]
+        o = {"reg": round(_median(reg), 4) if reg else None}
+        for w in ws:  # най-новата брошура, в която има доставки
+            pr = [p for d, p in rows if w[0] <= d <= w[1]]
+            if pr:
+                o["promo"], o["period"] = round(_median(pr), 4), f"{w[2]:%d.%m}–{w[3]:%d.%m.%y}"
+                break
+        out[code] = o
+    return out
+
+
 def enrich_form(form_id: int) -> list[str]:
     items = db.rows("SELECT id, barcode, code FROM items WHERE form_id=:f ORDER BY pos", f=form_id)
     fm = db.one("SELECT supplier, source, region_varna, region_sofia FROM forms WHERE id=:id", id=form_id) or {}
@@ -131,6 +164,11 @@ def enrich_form(form_id: int) -> list[str]:
     from . import minmax
     mm, mm_notes = minmax.info([r["code"] for r in res if r.get("code")])
     notes += mm_notes
+    buys = purchase_prices([r["code"] for r in res if r.get("code")])
+    for r in res:
+        b = buys.get(r.get("code") or -1, {})
+        db.q("UPDATE items SET buy_reg=:a, buy_promo=:b, buy_promo_period=:c WHERE id=:id",
+             a=b.get("reg"), b=b.get("promo"), c=b.get("period"), id=r["id"])
     for r in res:
         x = mm.get(r.get("code") or -1, {})
         if x.get("mm_sales30") is not None:
@@ -385,7 +423,7 @@ def checks(it: dict, kind: str) -> list[str]:
     if not it.get("code"):
         out.append("Няма наш код - артикулът не е намерен в Мистрал по баркода. "
                    "Потърси го по име в полето „Намери в Мистрал“ отдолу или напиши кода в „Наш код“.")
-    avg = n("avg_delivery") or md
+    avg = n("buy_reg") or n("avg_delivery") or md
     if reg and avg:
         net = avg / (1 + vat / 100)
         diff = (reg / avg - 1) * 100
@@ -393,10 +431,11 @@ def checks(it: dict, kind: str) -> list[str]:
             out.append(f"Редовната цена {reg:.4f} изглежда БЕЗ ДДС (средна покупна без ДДС {net:.4f}). "
                        f"С ДДС {vat:.0f}% е {reg * (1 + vat / 100):.4f}.")
         elif diff > 1:
-            out.append(f"ВДИГНАТА ЦЕНА: в бланката редовната е {reg:.4f}, а средната ни покупна цена в Мистрал е "
+            out.append(f"ВДИГНАТА ЦЕНА: в бланката редовната е {reg:.4f}, а "
+                       f"{'редовно купуваме по' if it.get('buy_reg') else 'средната ни покупна цена в Мистрал е'} "
                        f"{avg:.4f} (+{diff:.1f}%). Доставчикът е вдигнал договорената цена - проверете.")
         elif diff < -10:
-            out.append(f"Редовната цена {reg:.4f} е с {abs(diff):.0f}% под средната покупна ({avg:.4f}) - проверете дали е вярна.")
+            out.append(f"Редовната цена {reg:.4f} е с {abs(diff):.0f}% под покупната ({avg:.4f}) - проверете дали е вярна.")
     if base is not None and reg is not None and base + 1e-6 < reg:
         out.append("Базовата цена е по-ниска от редовната доставна.")
     if kind != "comp" and promo is not None and reg is not None and promo > reg + 1e-6:

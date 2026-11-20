@@ -282,7 +282,8 @@ function itemHTML(it,kind){
   const supLine=`<div class="prices">${kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:""}
       <span>База <b>${f(it.base,4)}</b></span><span>Т.О. <b>${it.to_pct!=null?f(it.to_pct,1)+"%":"—"}</b></span>
       <span>Редовна <b>${f(it.reg,4)}</b></span><span>Д.Т.О. <b class="${it.dto_pct?"g-ok":"g-bad"}">${it.dto_pct!=null?f(it.dto_pct,1)+"%":"няма"}</b></span>
-      <span>Промо дост. <b>${f(it.promo,4)}</b></span></div>`;
+      <span>Промо дост. <b>${f(it.promo,4)}</b></span>
+      ${it.buy_reg!=null?`<span>Редовно купуваме <b class="${it.reg!=null&&it.reg>it.buy_reg*1.01?"g-bad":""}">${f(it.buy_reg,4)}</b></span>`:""}${it.buy_promo!=null?`<span>На промо купувахме <b>${f(it.buy_promo,4)}</b> (${esc(it.buy_promo_period||"")})</span>`:""}</div>`;
   const k=it.kzp, blocked=k&&k.activations&&k.activations.length;
   const kz=k?`<div class="kzpbar" data-h="kzp"><span class="kzptag">КЗП</span>
       <span>${esc(k.category||"")}${k.perishable?" · малотраен (15 дни)":""}</span>
@@ -305,7 +306,7 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
       ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
     </div>
-    ${!isOffice()?"":`<div class="info">${it.avg_delivery!=null?`<span data-h="avgdel">Средна покупна (Мистрал) <b class="${it.reg!=null&&it.reg>it.avg_delivery*1.01?"g-bad":""}">${f(it.avg_delivery,4)}</b></span>`:""}${it.m_delivery!=null?`<span>Последна доставка <b>${f(it.m_delivery,4)}</b>${it.m_delivery_date?` · ${dt(it.m_delivery_date)}`:""}</span>`:""}${it.prev_reg!=null?`<span>Предишна бланка <b>${f(it.prev_reg,4)}</b> · ${dt(it.prev_at)}</span>`:""}</div>
+    ${!isOffice()?"":`<div class="info">${it.buy_reg!=null?`<span data-h="buyreg">Редовно купуваме по <b class="${it.reg!=null&&it.reg>it.buy_reg*1.01?"g-bad":"g-ok"}">${f(it.buy_reg,4)}</b></span>`:""}${it.buy_promo!=null?`<span data-h="buypromo">На промо сме купували по <b>${f(it.buy_promo,4)}</b> · ${esc(it.buy_promo_period||"")}</span>`:""}${it.avg_delivery!=null?`<span data-h="avgdel">Средна (Мистрал) <b>${f(it.avg_delivery,4)}</b></span>`:""}${it.m_delivery!=null?`<span>Последна доставка <b>${f(it.m_delivery,4)}</b>${it.m_delivery_date?` · ${dt(it.m_delivery_date)}`:""}</span>`:""}${it.prev_reg!=null?`<span>Предишна бланка <b>${f(it.prev_reg,4)}</b> · ${dt(it.prev_at)}</span>`:""}</div>
     <div class="rowtools">${it.code?`<button type="button" class="lnk" data-tgl="${it.id}" data-mode="set">Смени артикула</button>`:""}<button type="button" class="lnk" data-tgl="${it.id}" data-mode="add">+ Още артикул със същите цени</button><button type="button" class="lnk g-bad" data-delrow="${it.id}">Махни реда</button></div>
     <div class="find" id="fw-${it.id}" ${it.code?"hidden":""}><label class="grp" for="fs-${it.id}" id="fl-${it.id}">Намери в Мистрал</label>
       <input class="inp search" id="fs-${it.id}" data-find="${it.id}" data-mode="set" type="search" placeholder="Име, код или баркод - напр. ${esc((it.name||"").split(/\s+/).slice(0,2).join(" ").toLowerCase())}" autocomplete="off">
@@ -483,6 +484,8 @@ function drawArts(){
 }
 // ---------- помощ: какво е всяко число (пример: Bolgare Мерло от брошура 304) ----------
 const HELP={
+ buyreg:["Редовно купуваме по","Цената, на която реално купуваме артикула извън брошурите - медиана на доставките в Мистрал за последните 120 дни, без периодите на брошурите (от 7 дни преди до 7 дни след тях). С нея се сравнява редовната доставна в бланката: ако бланката е с над 1% по-висока - „ВДИГНАТА ЦЕНА“.","Линдт вафла: редовно 4,14 €"],
+ buypromo:["На промо сме купували по","Цената, на която сме купували по време на последната брошура на артикула (от доставките в Мистрал). Сравни я с промо доставната, която дава доставчикът сега.","Линдт вафла: на промо 3,724 € · 01.10–16.10.26"],
  avgdel:["Средна покупна цена","Средната цена, на която реално купуваме артикула (от Мистрал, с ДДС - медиана по магазините, заредени последните 90 дни). Ако редовната доставна в бланката е по-висока с над 1%, значи доставчикът е вдигнал договорената цена - излиза в червено „ВДИГНАТА ЦЕНА“.","Хляб България: средна 0,8500 €"],
  kzp:["КЗП","Артикулите от списъка на КЗП (файлът в папка КЗП в Drive) светят в синьо. За тях:<br>1. Маржът в промоцията не може да е по-голям от регулярния марж - може да е равен или по-малък. Системата показва най-високата позволена промо цена.<br>2. Ако артикулът е бил на каквато и да е активация в последните 30 дни преди началото на брошурата (15 дни за кисело мляко, прясно мляко и хляб) - не може да влезе в брошурата и свети в червено.","Регулярен марж 25,2% → промо марж най-много 25,2%"],
  shelf:["Рафт сега","Цената, на която артикулът се продава в магазина днес. Идва от Мистрал (основната ценова листа).","Bolgare Мерло: 4,20 €"],
