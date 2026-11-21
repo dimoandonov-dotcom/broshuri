@@ -271,8 +271,12 @@ function itemHTML(it,kind){
   const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad" data-h="funded">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
   const reg=(lbl,v)=>v==null?"":`<span data-h="sales">${lbl} <b>${v}</b> бр.</span>`;
   const asen=ME&&ME.role==="approver";
-  const mbox=it.margin!=null
-    ?`<div class="v ${it.kzp&&it.kzp_ok_margin===false?"m-low":mcls(it.margin)}">${f(it.margin,1)}%</div>${it.kzp&&it.kzp_ok_margin===false?`<div class="k g-bad" style="text-transform:none">КЗП: над регулярната</div>`:""}`
+  // преди промо цена: сегашната надценка (рафт спрямо редовна доставна, или база); след промо цена: спрямо промо доставната
+  const regCost=it.reg!=null?it.reg:it.base, nowMk=it.reg_margin!=null?it.reg_margin:(it.shelf&&regCost?Math.round((it.shelf-regCost)/regCost*1000)/10:null);
+  const mbox=it.approved==null
+    ?(nowMk!=null?`<div class="v ${mcls(nowMk)}">${f(nowMk,1)}%</div><div class="k" style="text-transform:none">сега · от ${it.reg!=null?"редовна":"база"} ${f(regCost,4)}</div>`:`<div class="v">—</div>`)
+    :it.margin!=null
+    ?`<div class="v ${it.kzp&&it.kzp_ok_margin===false?"m-low":mcls(it.margin)}">${f(it.margin,1)}%</div><div class="k" style="text-transform:none">${it.kzp&&it.kzp_ok_margin===false?`<span class="g-bad">КЗП: над регулярната</span>`:`промо · от доставна ${f(it.cost,4)}`}</div>`
     :it.margin_at_reg!=null
       ?`<div class="v ${mcls(it.margin_at_reg)}" title="при сегашната редовна доставна">${f(it.margin_at_reg,1)}%</div><div class="k" style="text-transform:none">без Д.Т.О. · с искането ${f(it.min_margin,0)}%</div>`
       :`<div class="v">—</div>`;
@@ -281,7 +285,7 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="shelf">Рафт сега <i class="q">?</i></label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
       <div class="fld"><label data-h="approved">Промо рафт <i class="q">?</i></label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
       <div class="fld"><label data-h="off">Отстъпка % <i class="q">?</i></label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
-      <div class="mg" data-h="margin"><div class="k">Надценка <i class="q">?</i> ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
+      <div class="mg" data-h="margin"><div class="k">Надценка <i class="q">?</i> ${it.approved!=null&&it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
     </div>`;
   let AE={};try{AE=it.asen_edits?JSON.parse(it.asen_edits):{}}catch(e){}
   const ae=k=>AE[k]?" asen-ed":"";
@@ -504,7 +508,7 @@ const HELP={
  shelf:["Рафт сега","Цената, на която артикулът се продава в магазина днес. Идва от Мистрал (основната ценова листа).","Bolgare Мерло: 4,20 €"],
  approved:["Промо рафт","Цената в брошурата - тя е решението на Асен. Пише се с ДДС, както ще е на етикета.","4,20 € → 3,36 €"],
  off:["Отстъпка %","Колко по-евтино е промо цената от сегашната. Може да пишеш процента вместо цената - системата смята цената сама.","1 − 3,36 ÷ 4,20 = 20%"],
- margin:["Надценка","Реалната надценка върху доставната цена по време на брошурата: (промо рафт − промо доставна) ÷ промо доставна. Зелено от 25% нагоре, жълто 20–25%, червено под 20%.<br><br><b>(сега X%)</b> - надценката днес, без промоция: (рафт − редовна доставна) ÷ редовна доставна.<br><b>без Д.Т.О.</b> - ако доставчикът не даде отстъпка (най-лошият случай).<br><b>с искането 20%</b> - ако доставчикът приеме исканата от нас цена.","(3,36 − 3,141) ÷ 3,141 = 7,0% без Д.Т.О."],
+ margin:["Надценка","Преди да има промо цена: надценката днес - (рафт сега − редовна доставна) ÷ редовна доставна (ако няма редовна - от базата). След като се напише промо цена или отстъпка: (промо рафт − промо доставна) ÷ промо доставна. Зелено от 25% нагоре, жълто 20–25%, червено под 20%.<br><br><b>(сега X%)</b> - надценката днес, без промоция: (рафт − редовна доставна) ÷ редовна доставна.<br><b>без Д.Т.О.</b> - ако доставчикът не даде отстъпка (най-лошият случай).<br><b>с искането 20%</b> - ако доставчикът приеме исканата от нас цена.","(3,36 − 3,141) ÷ 3,141 = 7,0% без Д.Т.О."],
  avgmargin:["Средна надценка","Средната надценка на всички артикули в бланката. Ако доставчикът още не е дал отстъпка, се смята без нея.","4 вина × 7,0% = 7,0%"],
  funded:["Доплащаме","Колко пари даваме ние от нашата надценка: (сегашна цена − промо цена) − отстъпката на доставчика, умножено по продадените бройки за 15 дни в регионите на брошурата.","(4,20 − 3,36) − 0 = 0,84 €/бр. × 21 бр. = 18 €"],
  need:["Искаме доставна","Каква промо доставна цена да поискаме от доставчика, за да имаме поне 20% надценка при одобрената цена на рафта: промо рафт ÷ 1,20. В скоби е каква Д.Т.О. означава това спрямо редовната му цена.","3,36 ÷ 1,20 = 2,80 € → Д.Т.О. 10,9% от 3,141"],
