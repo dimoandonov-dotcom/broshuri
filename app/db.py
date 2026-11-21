@@ -69,6 +69,7 @@ CREATE INDEX IF NOT EXISTS price_history_k ON price_history(supplier, code, at D
 ALTER TABLE items ADD COLUMN IF NOT EXISTS vat NUMERIC(4,1);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS m_delivery NUMERIC(12,4);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS m_delivery_date DATE;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS asen_edits TEXT;
 CREATE TABLE IF NOT EXISTS supplier_prices (
   supplier TEXT NOT NULL, code INT NOT NULL, reg NUMERIC(12,4) NOT NULL,
   source TEXT, updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

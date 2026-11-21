@@ -82,6 +82,9 @@ h1 span{color:var(--pen)}
 .is-blocked .kzptag{background:var(--bad)}
 .kzpmark{display:inline-block;background:var(--kzp);color:#fff;font-weight:800;font-size:.66rem;padding:1px 6px;border-radius:5px;margin-right:6px;vertical-align:1px}
 .fld input.auto{border-color:var(--bad);color:var(--bad);font-weight:600}
+.asenbox{background:#fff4d6;border:1px solid #e8b400;color:#6b4e00;border-radius:8px;padding:7px 10px;font-size:.85rem}
+.asenbox s{opacity:.6}
+input.asen-ed{background:#fff4d6!important;border-color:#e8b400!important}
 .autotag{font-size:.62rem;color:var(--bad);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .save{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.18)}
 .tour-hole{position:fixed;z-index:40;border-radius:12px;box-shadow:0 0 0 4px var(--pen),0 0 0 9999px rgba(20,18,16,.62);pointer-events:none;transition:all .35s cubic-bezier(.3,.9,.3,1)}
@@ -279,6 +282,21 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="off">Отстъпка % <i class="q">?</i></label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
       <div class="mg" data-h="margin"><div class="k">Марж <i class="q">?</i> ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
     </div>`;
+  let AE={};try{AE=it.asen_edits?JSON.parse(it.asen_edits):{}}catch(e){}
+  const ae=k=>AE[k]?" asen-ed":"";
+  const LBL={base:"база",to_pct:"Т.О.",reg:"редовна",dto_pct:"Д.Т.О.",promo:"промо доставна"};
+  const fv=(k,x)=>x==null?"празно":["to_pct","dto_pct"].includes(k)?f(x,1)+"%":f(x,4);
+  const aeBox=Object.keys(AE).length?`<div class="asenbox" data-h="asenedit">✎ Асен промени: ${Object.entries(AE).map(([k,[o,n]])=>`${LBL[k]} <s>${fv(k,o)}</s> → <b>${fv(k,n)}</b>`).join(" · ")}</div>`:"";
+  const supEntry=`    <div class="entry">
+      ${kind==="comp"?`<div class="fld"><label data-h="comp">Компенсация/бр. <i class="q">?</i></label><input data-k="comp" value="${nv(it.comp)}" disabled></div>`:""}
+      <div class="fld"><label data-h="base">Базова с ДДС <i class="q">?</i></label><input data-k="base" class="${ae("base")}" inputmode="decimal" value="${pv(it.base)}"></div>
+      <div class="fld"><label data-h="to">Т.О. % <i class="q">?</i></label><input data-k="to_pct" class="${ae("to_pct")}" inputmode="decimal" value="${nv(it.to_pct)}"></div>
+      <div class="fld"><label data-h="reg">Редовна дост. <i class="q">?</i></label><input data-k="reg" class="${ae("reg")}" inputmode="decimal" value="${pv(it.reg)}"></div>
+      <div class="fld"><label data-h="dto">Д.Т.О. % <i class="q">?</i></label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}" class="${it.dto_src==="авто"?"auto":""}${ae("dto_pct")}" title="${it.dto_src==="авто"?"Сметната автоматично - поправи, ако трябва":""}">${it.dto_src==="авто"?`<span class="autotag">авто</span>`:""}</div>
+      <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" class="${ae("promo")}" inputmode="decimal" value="${pv(it.promo)}"></div>
+      ${asen||it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
+    </div>`;
+  const asenInfo=(it.buy_reg!=null||it.buy_promo!=null)?`<div class="prices">${it.buy_reg!=null?`<span data-h="buyreg">Редовно купуваме <b class="${it.reg!=null&&it.reg>it.buy_reg*1.01?"g-bad":""}">${f(it.buy_reg,4)}</b></span>`:""}${it.buy_promo!=null?`<span data-h="buypromo">На промо купувахме <b>${f(it.buy_promo,4)}</b> (${esc(it.buy_promo_period||"")})</span>`:""}</div>`:"";
   const supLine=`<div class="prices">${kind==="comp"?`<span>Компенсация <b>${f(it.comp,3)}</b>/бр.</span>`:""}
       <span>База <b>${f(it.base,4)}</b></span><span>Т.О. <b>${it.to_pct!=null?f(it.to_pct,1)+"%":"—"}</b></span>
       <span>Редовна <b>${f(it.reg,4)}</b></span><span>Д.Т.О. <b class="${it.dto_pct?"g-ok":"g-bad"}">${it.dto_pct!=null?f(it.dto_pct,1)+"%":"няма"}</b></span>
@@ -295,17 +313,9 @@ function itemHTML(it,kind){
       ${it.margin30!=null?`<span data-h="margin30">Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
       ${it.last_promo?`<span data-h="lastpromo">Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
     ${it.checks&&it.checks.length?`<div class="chk" data-h="checks">${it.checks.map(c=>`<div>⚠ ${esc(c)}</div>`).join("")}</div>`:""}
-    ${asen?buyer+`<div class="prices">${fund}</div><div class="grp">Доставчик · с ДДС</div>`+supLine:`
+    ${aeBox}${asen?buyer+`<div class="prices">${fund}</div><div class="grp">Доставчик · с ДДС · можеш да поправиш, ако е грешно</div>`+supEntry+asenInfo:`
     <div class="grp">Доставчик · цени ${NET?"<u>без</u>":"с"} ДДС${it.vat!=null?` · ДДС ${f(it.vat,0)}%`:""}${it.reg_src?` · редовна от: ${esc(it.reg_src)}`:""}</div>
-    <div class="entry">
-      ${kind==="comp"?`<div class="fld"><label data-h="comp">Компенсация/бр. <i class="q">?</i></label><input data-k="comp" value="${nv(it.comp)}" disabled></div>`:""}
-      <div class="fld"><label data-h="base">Базова с ДДС <i class="q">?</i></label><input data-k="base" inputmode="decimal" value="${pv(it.base)}"></div>
-      <div class="fld"><label data-h="to">Т.О. % <i class="q">?</i></label><input data-k="to_pct" inputmode="decimal" value="${nv(it.to_pct)}"></div>
-      <div class="fld"><label data-h="reg">Редовна дост. <i class="q">?</i></label><input data-k="reg" inputmode="decimal" value="${pv(it.reg)}"></div>
-      <div class="fld"><label data-h="dto">Д.Т.О. % <i class="q">?</i></label><input data-k="dto_pct" inputmode="decimal" value="${nv(it.dto_pct)}" class="${it.dto_src==="авто"?"auto":""}" title="${it.dto_src==="авто"?"Сметната автоматично - поправи, ако трябва":""}">${it.dto_src==="авто"?`<span class="autotag">авто</span>`:""}</div>
-      <div class="fld"><label data-h="promo">Промо дост. <i class="q">?</i></label><input data-k="promo" inputmode="decimal" value="${pv(it.promo)}"></div>
-      ${it.code?"":`<div class="fld"><label data-h="code">Наш код <i class="q">?</i></label><input data-k="code" inputmode="numeric" value=""></div>`}
-    </div>
+    ${supEntry}
     ${!isOffice()?"":`<div class="info">${it.buy_reg!=null?`<span data-h="buyreg">Редовно купуваме по <b class="${it.reg!=null&&it.reg>it.buy_reg*1.01?"g-bad":"g-ok"}">${f(it.buy_reg,4)}</b></span>`:""}${it.buy_promo!=null?`<span data-h="buypromo">На промо сме купували по <b>${f(it.buy_promo,4)}</b> · ${esc(it.buy_promo_period||"")}</span>`:""}${it.avg_delivery!=null?`<span data-h="avgdel">Средна (Мистрал) <b>${f(it.avg_delivery,4)}</b></span>`:""}${it.m_delivery!=null?`<span>Последна доставка <b>${f(it.m_delivery,4)}</b>${it.m_delivery_date?` · ${dt(it.m_delivery_date)}`:""}</span>`:""}${it.prev_reg!=null?`<span>Предишна бланка <b>${f(it.prev_reg,4)}</b> · ${dt(it.prev_at)}</span>`:""}</div>
     <div class="rowtools">${it.code?`<button type="button" class="lnk" data-tgl="${it.id}" data-mode="set">Смени артикула</button>`:""}<button type="button" class="lnk" data-tgl="${it.id}" data-mode="add">+ Още артикул със същите цени</button><button type="button" class="lnk g-bad" data-delrow="${it.id}">Махни реда</button></div>
     <div class="find" id="fw-${it.id}" ${it.code?"hidden":""}><label class="grp" for="fs-${it.id}" id="fl-${it.id}">Намери в Мистрал</label>
@@ -484,6 +494,7 @@ function drawArts(){
 }
 // ---------- помощ: какво е всяко число (пример: Bolgare Мерло от брошура 304) ----------
 const HELP={
+ asenedit:["Асен промени","Асен е поправил цена на доставчика (база, Т.О., редовна, Д.Т.О. или промо доставна). Зачеркнатото е какво е било, удебеленото - новото. Променените полета светят в жълто. Всичко останало (редовна, промо доставна, марж, проверки) е преизчислено автоматично, а бланката 6Б за доставчика излиза с новите цени. Новата цена се запомня и за следващата бланка на доставчика."],
  buyreg:["Редовно купуваме по","Цената, на която реално купуваме артикула извън брошурите - медиана на доставките в Мистрал за последните 120 дни, без периодите на брошурите (от 7 дни преди до 7 дни след тях). С нея се сравнява редовната доставна в бланката: ако бланката е с над 1% по-висока - „ВДИГНАТА ЦЕНА“.","Линдт вафла: редовно 4,14 €"],
  buypromo:["На промо сме купували по","Цената, на която сме купували по време на последната брошура на артикула (от доставките в Мистрал). Сравни я с промо доставната, която дава доставчикът сега.","Линдт вафла: на промо 3,724 € · 01.10–16.10.26"],
  avgdel:["Средна покупна цена","Средната цена, на която реално купуваме артикула (от Мистрал, с ДДС - медиана по магазините, заредени последните 90 дни). Ако редовната доставна в бланката е по-висока с над 1%, значи доставчикът е вдигнал договорената цена - излиза в червено „ВДИГНАТА ЦЕНА“.","Хляб България: средна 0,8500 €"],

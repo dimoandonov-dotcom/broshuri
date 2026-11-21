@@ -9,6 +9,7 @@ MSSQL_* / SOFIA_MSSQL_*, IMAP_HOST/USER/PASSWORD, TELEGRAM_TOKEN, TELEGRAM_CHAT_
 from __future__ import annotations
 
 import asyncio
+import json
 import hashlib
 import hmac
 import os
@@ -546,6 +547,25 @@ class ItemPatch(BaseModel):
     clear_approved: bool = False
 
 
+def log_asen_edits(iid, before):
+    """Запомня какво е сменил Асен в цените на доставчика: {поле: [старо, ново]} - пазим първоначалната стойност."""
+    after = db.one("SELECT base, to_pct, reg, dto_pct, promo FROM items WHERE id=:id", id=iid)
+    try:
+        log = json.loads(before.get("asen_edits") or "{}")
+    except Exception:
+        log = {}
+    for k in ("base", "to_pct", "reg", "dto_pct", "promo"):
+        o = before.get(k); nw = after.get(k)
+        o = float(o) if o is not None else None; nw = float(nw) if nw is not None else None
+        if (o is None) != (nw is None) or (o is not None and abs(o - nw) > 1e-6):
+            first = log[k][0] if k in log else o
+            if (first is None and nw is None) or (first is not None and nw is not None and abs(first - nw) < 1e-6):
+                log.pop(k, None)   # върнал е първоначалната стойност
+            else:
+                log[k] = [first, nw]
+    db.q("UPDATE items SET asen_edits=:l WHERE id=:id", l=json.dumps(log) if log else None, id=iid)
+
+
 @app.post("/api/items/{iid}")
 def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
     it = db.one("SELECT form_id FROM items WHERE id=:id", id=iid)
@@ -564,6 +584,8 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
     # цени от доставчика, въведени от офиса: базова -> (Т.О.) -> редовна -> (Д.Т.О.) -> промо доставна
     prices = {k: getattr(p, k) for k in ("base", "to_pct", "reg", "dto_pct", "promo") if getattr(p, k) is not None}
     cl = [k for k in p.clear if k in ("base", "to_pct", "reg", "dto_pct", "promo")]
+    is_asen = user["role"] == "approver"
+    before = db.one("SELECT base, to_pct, reg, dto_pct, promo, asen_edits FROM items WHERE id=:id", id=iid) if is_asen else None
     if cl:
         if "dto_pct" in cl or "promo" in cl:
             cl = list(set(cl) | {"dto_pct", "promo"})
@@ -584,10 +606,12 @@ def update_item(iid: int, p: ItemPatch, user: dict = Depends(me)):
         elif v["dto_pct"] is not None and v["reg"] is not None:
             v["promo"] = round(v["reg"] * (1 - v["dto_pct"] / 100), 4)
         db.q("""UPDATE items SET base=:base, to_pct=:to_pct, reg=:reg, dto_pct=:dto_pct, promo=:promo,
-                reg_src='офис', dto_src=CASE WHEN :dc THEN 'офис' ELSE dto_src END WHERE id=:id""",
-             id=iid, dc=("dto_pct" in prices or "promo" in prices), **v)
+                reg_src=:src, dto_src=CASE WHEN :dc THEN :src ELSE dto_src END WHERE id=:id""",
+             id=iid, dc=("dto_pct" in prices or "promo" in prices), src="Асен" if is_asen else "офис", **v)
         row = db.one("""SELECT f.supplier, i.code FROM items i JOIN forms f ON f.id=i.form_id WHERE i.id=:id""", id=iid)
         remember_reg(row["supplier"], row["code"], v["reg"], "поправена", user["user"], v["base"], v["to_pct"], it["form_id"])
+    if is_asen and (prices or cl):
+        log_asen_edits(iid, before)
     if p.code is not None:
         enrich_form(it["form_id"])
         if not db.one("SELECT 1 AS x FROM items WHERE form_id=:f AND code IS NULL", f=it["form_id"]):
