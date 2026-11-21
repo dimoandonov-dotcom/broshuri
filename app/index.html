@@ -85,6 +85,7 @@ h1 span{color:var(--pen)}
 .asenbox{background:#fff4d6;border:1px solid #e8b400;color:#6b4e00;border-radius:8px;padding:7px 10px;font-size:.85rem}
 .asenbox s{opacity:.6}
 input.asen-ed{background:#fff4d6!important;border-color:#e8b400!important}
+textarea.need{border:2px solid var(--bad)!important;background:var(--bad-soft)}
 .autotag{font-size:.62rem;color:var(--bad);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .save{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.18)}
 .tour-hole{position:fixed;z-index:40;border-radius:12px;box-shadow:0 0 0 4px var(--pen),0 0 0 9999px rgba(20,18,16,.62);pointer-events:none;transition:all .35s cubic-bezier(.3,.9,.3,1)}
@@ -384,7 +385,7 @@ async function renderForm(id){
   app.querySelectorAll("[data-delrow]").forEach(b=>{let armed=false;b.onclick=async()=>{if(!armed){armed=true;b.textContent="Сигурна ли си? Натисни пак";return}
     try{FORM=await api("/api/items/"+b.dataset.delrow,{method:"DELETE"});const y=window.scrollY;await renderForm(F.id);window.scrollTo(0,y);toast("Редът е махнат")}catch(e){toast(e.message)}}});
   app.querySelectorAll(".note textarea").forEach(t=>{const fit=()=>{t.style.height="auto";t.style.height=t.scrollHeight+"px"};fit();t.oninput=fit});
-  if($("#ret"))$("#ret").onclick=async()=>{$("#ret").disabled=true;try{await post(`/api/forms/${F.id}/return`,{});toast("Записано и върнато към Габи ✓");FILTER=null;location.hash=""}catch(e){toast(e.message);$("#ret").disabled=false}};
+  if($("#ret"))$("#ret").onclick=async()=>{$("#ret").disabled=true;try{if($("#note"))await post(`/api/forms/${F.id}`,{note:$("#note").value});await post(`/api/forms/${F.id}/return`,{});toast("Записано и върнато към Габи ✓");FILTER=null;location.hash=""}catch(e){toast(e.message);$("#ret").disabled=false}};
   if($("#urg"))$("#urg").onchange=()=>post(`/api/forms/${F.id}`,{urgent:$("#urg").checked}).then(()=>toast($("#urg").checked?"Отбелязана като спешна":"Не е спешна"));
   if($("#urgt"))$("#urgt").onclick=async()=>{await post(`/api/forms/${F.id}`,{urgent:!F.urgent});toast(!F.urgent?"Отбелязана като спешна - Асен я вижда най-горе":"Не е спешна");renderForm(F.id)};
   if($("#rdy"))$("#rdy").onclick=async()=>{$("#rdy").disabled=true;try{await post(`/api/forms/${F.id}/ready`,{});toast("Изпратена на Асен ✓");renderForm(F.id)}catch(e){toast(e.message);$("#rdy").disabled=false}};
@@ -403,7 +404,8 @@ async function renderForm(id){
   if($("#net"))$("#net").onchange=()=>{NET=$("#net").checked;try{localStorage.setItem("br_net",NET?"1":"0")}catch(e){}const y=window.scrollY;renderForm(F.id).then(()=>window.scrollTo(0,y))};
   app.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{
     const s=F.status===b.dataset.st?"pending":b.dataset.st;
-    await post(`/api/forms/${F.id}`,{status:s,fmt:$("#fmt").value,note:$("#note").value});toast(s==="pending"?"Решението е махнато":ST[s][0]);renderForm(F.id)});
+    await post(`/api/forms/${F.id}`,{status:s,fmt:$("#fmt").value,note:$("#note").value});toast(s==="pending"?"Решението е махнато":ST[s][0]);await renderForm(F.id);
+    if((s==="rejected"||s==="counter")&&!$("#note").value.trim()){const n=$("#note");n.classList.add("need");n.placeholder=s==="rejected"?"Защо отказваш? Напиши причината - Габи ще я каже на доставчика":"Какво искаме от доставчика? Напр. Д.Т.О. 15% или промо доставна 1,40";n.scrollIntoView({block:"center"});n.focus()}});
   if(canDecide()){$("#fmt").onchange=()=>post(`/api/forms/${F.id}`,{fmt:$("#fmt").value});$("#note").onchange=()=>post(`/api/forms/${F.id}`,{note:$("#note").value}).then(()=>toast("Бележката е записана"))}
   $("#rf").onclick=async()=>{toast("Обновявам от Мистрал…");const r=await post(`/api/forms/${F.id}/refresh`,{});toast(r.notes&&r.notes.length?r.notes.join(" · "):"Обновено");renderForm(F.id)};
   if($("#sent"))$("#sent").onclick=async()=>{await post(`/api/forms/${F.id}/sent`,{});toast("Отбелязана като изпратена");renderForm(F.id)};

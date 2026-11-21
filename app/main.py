@@ -684,6 +684,9 @@ def return_to_office(fid: int, user: dict = Depends(need("approver"))):
     """Асен натиска „Запис“: цените му са записани, празните Д.Т.О. се попълват автоматично
     (за 20% марж, при КЗП - не над регулярния марж) и бланката се връща при офиса за изпращане."""
     f = get_form(fid, user)
+    if f["status"] in ("rejected", "counter") and not (f.get("note") or "").strip():
+        what = "отказа" if f["status"] == "rejected" else "контраофертата"
+        raise HTTPException(400, f"Напиши в бележката причината за {what} - Габи трябва да я каже на доставчика.")
     for it in f["items"]:
         if it.get("dto_pct") is not None or it.get("approved") is None or not it.get("reg") or f["kind"] == "comp":
             continue
