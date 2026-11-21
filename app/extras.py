@@ -331,7 +331,7 @@ def blank_xlsx(form: dict, items: list[dict]) -> bytes:
 
     r = end + 1
     if asked:
-        put(f"A{r}", f"В червено: искана от КУПУВАЧА промоционална доставна цена и Д.Т.О.% (минимален марж "
+        put(f"A{r}", f"В червено: искана от КУПУВАЧА промоционална доставна цена и Д.Т.О.% (минимална надценка "
                      f"{float(items[0].get('min_margin') or 20):.0f}% при одобрената цена на рафта).",
             F(size=8, bold=True, italic=True, color="C0193F"), L, None, f"K{r}")
     notes = [(it.get("m_name") or it["name"], it["item_note"]) for it in items

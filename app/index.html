@@ -261,18 +261,18 @@ async function upload(files){
   }catch(e){toast(e.message)}
 }
 
-const mcls=m=>m==null?"":m>=22?"m-good":m>=15?"m-mid":"m-low";
+const mcls=m=>m==null?"":m>=25?"m-good":m>=20?"m-mid":"m-low";
 function itemHTML(it,kind){
   const dis=canDecide()?"":"disabled";
   const vr=1+(Number(it.vat??20))/100;
   const nv=v=>v==null?"":String(Number(v)).replace(".",",");
   const pv=v=>v==null?"":String(NET?Math.round(Number(v)/vr*10000)/10000:Number(v)).replace(".",",");
-  const need=it.need_delivery!=null?`<span data-h="need">За ${f(it.min_margin,0)}% марж искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
+  const need=it.need_delivery!=null?`<span data-h="need">За ${f(it.min_margin,0)}% надценка искаме доставна <b class="${it.cost!=null&&it.cost>it.need_delivery?"g-bad":"g-ok"}">≤ ${f(it.need_delivery,4)}</b>${it.need_dto!=null?` (Д.Т.О. ${f(it.need_dto,1)}%)`:""}</span>`:"";
   const fund=(it.funded==null?"":it.funded>0.005?`<span class="g-bad" data-h="funded">Доплащаме ${f(it.funded)} €/бр.${it.sales30?` × ${it.sales30} = <b>${f(it.funded*it.sales30,0)} €</b>`:""}</span>`:`<span class="g-ok">Доставчикът покрива отстъпката</span>`)+need;
   const reg=(lbl,v)=>v==null?"":`<span data-h="sales">${lbl} <b>${v}</b> бр.</span>`;
   const asen=ME&&ME.role==="approver";
   const mbox=it.margin!=null
-    ?`<div class="v ${it.kzp&&it.kzp_ok_margin===false?"m-low":mcls(it.margin)}">${f(it.margin,1)}%</div>${it.kzp&&it.kzp_ok_margin===false?`<div class="k g-bad" style="text-transform:none">КЗП: над регулярния</div>`:""}`
+    ?`<div class="v ${it.kzp&&it.kzp_ok_margin===false?"m-low":mcls(it.margin)}">${f(it.margin,1)}%</div>${it.kzp&&it.kzp_ok_margin===false?`<div class="k g-bad" style="text-transform:none">КЗП: над регулярната</div>`:""}`
     :it.margin_at_reg!=null
       ?`<div class="v ${mcls(it.margin_at_reg)}" title="при сегашната редовна доставна">${f(it.margin_at_reg,1)}%</div><div class="k" style="text-transform:none">без Д.Т.О. · с искането ${f(it.min_margin,0)}%</div>`
       :`<div class="v">—</div>`;
@@ -281,7 +281,7 @@ function itemHTML(it,kind){
       <div class="fld"><label data-h="shelf">Рафт сега <i class="q">?</i></label><input data-k="shelf" inputmode="decimal" value="${it.shelf==null?"":f(it.shelf)}"></div>
       <div class="fld"><label data-h="approved">Промо рафт <i class="q">?</i></label><input class="pen" data-k="approved" inputmode="decimal" value="${it.approved==null?"":f(it.approved)}" ${dis}></div>
       <div class="fld"><label data-h="off">Отстъпка % <i class="q">?</i></label><input data-k="pct" inputmode="decimal" value="${it.off_pct??""}" ${dis}></div>
-      <div class="mg" data-h="margin"><div class="k">Марж <i class="q">?</i> ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
+      <div class="mg" data-h="margin"><div class="k">Надценка <i class="q">?</i> ${it.reg_margin!=null?`<span style="text-transform:none">(сега ${f(it.reg_margin,1)}%)</span>`:""}</div>${mbox}</div>
     </div>`;
   let AE={};try{AE=it.asen_edits?JSON.parse(it.asen_edits):{}}catch(e){}
   const ae=k=>AE[k]?" asen-ed":"";
@@ -306,12 +306,12 @@ function itemHTML(it,kind){
   const k=it.kzp, blocked=k&&k.activations&&k.activations.length;
   const kz=k?`<div class="kzpbar" data-h="kzp"><span class="kzptag">КЗП</span>
       <span>${esc(k.category||"")}${k.perishable?" · малотраен (15 дни)":""}</span>
-      ${blocked?`<b class="g-bad">не може в брошурата</b>`:it.kzp_max_price!=null?`<span>Промо цена най-много <b>${f(it.kzp_max_price)} €</b> (марж ≤ ${f(it.reg_margin,1)}%)</span>`:""}</div>`:"";
+      ${blocked?`<b class="g-bad">не може в брошурата</b>`:it.kzp_max_price!=null?`<span>Промо цена най-много <b>${f(it.kzp_max_price)} €</b> (надценка ≤ ${f(it.reg_margin,1)}%)</span>`:""}</div>`:"";
   return `<div class="item${k?" is-kzp":""}${blocked?" is-blocked":""}" data-id="${it.id}">
     ${kz}<div><div class="it-n">${esc(it.name)}</div>
     <div class="code">${it.code?`<b>${it.code}</b>`:`<span class="g-bad">няма код</span>`} · ${esc(it.barcode||"без баркод")}${it.m_name&&it.m_name!==it.name?` · ${esc(it.m_name)}`:""}</div></div>
     <div class="prices">${reg("Продажби 15 д. Варна",it.sales30_varna)}${reg("София",it.sales30_sofia)}${it.stock!=null?`<span data-h="stock">Наличност <b>${it.stock}</b>${it.stores?` · в ${it.stores} м-на`:""}</span>`:""}
-      ${it.margin30!=null?`<span data-h="margin30">Марж каса <b>${f(it.margin30,1)}%</b></span>`:""}
+      ${it.margin30!=null?`<span data-h="margin30">Надценка каса <b>${f(it.margin30,1)}%</b></span>`:""}
       ${it.last_promo?`<span data-h="lastpromo">Последна брошура <b>${esc(it.last_promo)}</b>${it.uplift?` · ×${f(it.uplift,1)}`:""}</span>`:it.code?`<span>Не е бил в брошура</span>`:""}</div>
     ${it.checks&&it.checks.length?`<div class="chk" data-h="checks">${it.checks.map(c=>`<div>⚠ ${esc(c)}</div>`).join("")}</div>`:""}
     ${aeBox}${asen?buyer+`<div class="prices">${fund}</div><div class="grp">Доставчик · с ДДС · можеш да поправиш, ако е грешно</div>`+supEntry+asenInfo:`
@@ -345,13 +345,13 @@ async function renderForm(id){
      :`<div class="card muted">Офисът още подготвя тази бланка.</div>`):""}
   ${F.warnings?`<div class="warn">${esc(F.warnings)}</div>`:""}
   ${F.kzp_count?`<div class="kzpbar card" style="border:2px solid var(--kzp);background:var(--kzp-soft)" data-h="kzp"><span class="kzptag">КЗП</span>
-     <span><b>${F.kzp_count}</b> арт. от списъка на КЗП - светят в синьо. Промо маржът им не може да е над регулярния.</span></div>`:""}
+     <span><b>${F.kzp_count}</b> арт. от списъка на КЗП - светят в синьо. Промо надценката им не може да е над регулярната.</span></div>`:""}
   ${(()=>{const n=it.reduce((a,x)=>a+(x.checks?x.checks.length:0),0);return n?`<div class="chk"><b>⚠ ${n} неща за проверка</b> - виж червените полета по редовете.</div>`:""})()}
   ${ME.role==="approver"?"":`<label class="card" style="display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer"><input type="checkbox" id="net" ${NET?"checked":""} style="width:20px;height:20px">
     <span><b>Въвеждам цените без ДДС</b><br><span class="muted">системата добавя ДДС по ставката на всеки артикул от Мистрал</span></span></label>`}
   <div class="stats"><div class="stat"><div class="n">${it.length}</div><div class="l">артикула</div></div>
    <div class="stat"><div class="n">${it.filter(x=>x.approved!=null).length}</div><div class="l">с цена</div></div>
-   <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l" data-h="avgmargin">среден марж <i class="q">?</i></div></div>
+   <div class="stat"><div class="n">${ms.length?f(ms.reduce((a,b)=>a+b,0)/ms.length,1)+"%":"—"}</div><div class="l" data-h="avgmargin">средна надценка <i class="q">?</i></div></div>
    <div class="stat"><div class="n">${f(tot,0)} €</div><div class="l" data-h="funded">доплащаме <i class="q">?</i></div></div></div>
   <div class="card">${it.map(x=>itemHTML(x,F.kind)).join("")}</div>
   ${isOffice()?`<div class="card find"><label class="grp" for="fs-new">+ Добави артикул към бланката</label>
@@ -363,7 +363,7 @@ async function renderForm(id){
     <textarea id="note" placeholder="Бележка към доставчика (напр. искаме по-висока Д.Т.О.)" ${canDecide()?"":"disabled"}>${esc(F.note||"")}</textarea>
     ${canDecide()?`<div class="r">${[["approved","Одобри","a"],["counter","Контраоферта","c"],["rejected","Откажи","x"]]
       .map(([k,l,c])=>`<button class="btn ${c}" data-st="${k}" aria-pressed="${F.status===k}">${l}</button>`).join("")}</div>
-      <div class="muted">Цените се пазят веднага. Като свършиш, натисни „Запис и връщане към Габи“ - празните Д.Т.О. се попълват автоматично (за ${f(it[0]?it[0].min_margin:20,0)}% марж, при КЗП - не над регулярния), а Габи праща бланката на доставчика.</div>
+      <div class="muted">Цените се пазят веднага. Като свършиш, натисни „Запис и връщане към Габи“ - празните Д.Т.О. се попълват автоматично (за ${f(it[0]?it[0].min_margin:20,0)}% надценка, при КЗП - не над регулярния), а Габи праща бланката на доставчика.</div>
       ${F.returned_at&&(!F.ready_at||F.returned_at>=F.ready_at)?`<div class="muted">Върната към офиса ${new Date(F.returned_at).toLocaleString("bg-BG",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})}</div>`:""}`
       :`<div><span class="badge ${ST[F.status][1]}">${ST[F.status][0]}</span> ${F.decided_by?`<span class="muted">от ${esc(F.decided_by)}</span>`:""}</div>`}
   </div>
@@ -487,7 +487,7 @@ function drawArts(){
    ${list.map(a=>`<label class="item" style="flex-direction:row;align-items:center;gap:12px;cursor:pointer">
       <input type="checkbox" data-c="${a.code}" ${PICK.has(a.code)?"checked":""} style="width:20px;height:20px">
       <div style="flex:1;min-width:0"><div class="it-n">${KZP&&KZP.has(a.code)?`<span class="kzpmark">КЗП</span>`:""}${esc(a.name)}</div>
-      <div class="prices"><span>Варна <b>${a.varna??a.sales30}</b></span><span>София <b>${a.sofia??0}</b> бр./15 д.</span>${a.margin30!=null?`<span>марж <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
+      <div class="prices"><span>Варна <b>${a.varna??a.sales30}</b></span><span>София <b>${a.sofia??0}</b> бр./15 д.</span>${a.margin30!=null?`<span>надценка <b>${f(a.margin30,1)}%</b></span>`:""}${a.stock!=null?`<span>налични ${a.stock}</span>`:""}
       ${a.last_promo?`<span>брошура ${esc(a.last_promo)}${a.uplift?` ×${f(a.uplift,1)}`:""}</span>`:""}<span class="code">${a.code}</span></div></div></label>`).join("")}</div>`;
   const upd=()=>{$("#cnt").textContent=PICK.size?`избрани ${PICK.size}`:"";$("#mk").disabled=!PICK.size};
   box.querySelectorAll("[data-c]").forEach(cb=>cb.onchange=()=>{const c=+cb.dataset.c;cb.checked?PICK.add(c):PICK.delete(c);upd()});
@@ -496,27 +496,27 @@ function drawArts(){
 }
 // ---------- помощ: какво е всяко число (пример: Bolgare Мерло от брошура 304) ----------
 const HELP={
- asenedit:["Асен промени","Асен е поправил цена на доставчика (база, Т.О., редовна, Д.Т.О. или промо доставна). Зачеркнатото е какво е било, удебеленото - новото. Променените полета светят в жълто. Всичко останало (редовна, промо доставна, марж, проверки) е преизчислено автоматично, а бланката 6Б за доставчика излиза с новите цени. Новата цена се запомня и за следващата бланка на доставчика."],
+ asenedit:["Асен промени","Асен е поправил цена на доставчика (база, Т.О., редовна, Д.Т.О. или промо доставна). Зачеркнатото е какво е било, удебеленото - новото. Променените полета светят в жълто. Всичко останало (редовна, промо доставна, надценка, проверки) е преизчислено автоматично, а бланката 6Б за доставчика излиза с новите цени. Новата цена се запомня и за следващата бланка на доставчика."],
  buyreg:["Редовно купуваме по","Цената, на която реално купуваме артикула извън брошурите - медиана на доставките в Мистрал за последните 120 дни, без периодите на брошурите (от 7 дни преди до 7 дни след тях). С нея се сравнява редовната доставна в бланката: ако бланката е с над 1% по-висока - „ВДИГНАТА ЦЕНА“.","Линдт вафла: редовно 4,14 €"],
  buypromo:["На промо сме купували по","Цената, на която сме купували по време на последната брошура на артикула (от доставките в Мистрал). Сравни я с промо доставната, която дава доставчикът сега.","Линдт вафла: на промо 3,724 € · 01.10–16.10.26"],
  avgdel:["Средна покупна цена","Средната цена, на която реално купуваме артикула (от Мистрал, с ДДС - медиана по магазините, заредени последните 90 дни). Ако редовната доставна в бланката е по-висока с над 1%, значи доставчикът е вдигнал договорената цена - излиза в червено „ВДИГНАТА ЦЕНА“.","Хляб България: средна 0,8500 €"],
- kzp:["КЗП","Артикулите от списъка на КЗП (файлът в папка КЗП в Drive) светят в синьо. За тях:<br>1. Маржът в промоцията не може да е по-голям от регулярния марж - може да е равен или по-малък. Системата показва най-високата позволена промо цена.<br>2. Ако артикулът е бил на каквато и да е активация в последните 30 дни преди началото на брошурата (15 дни за кисело мляко, прясно мляко и хляб) - не може да влезе в брошурата и свети в червено.","Регулярен марж 25,2% → промо марж най-много 25,2%"],
+ kzp:["КЗП","Артикулите от списъка на КЗП (файлът в папка КЗП в Drive) светят в синьо. За тях:<br>1. Надценката в промоцията не може да е по-голяма от регулярната - може да е равна или по-малка. Системата показва най-високата позволена промо цена.<br>2. Ако артикулът е бил на каквато и да е активация в последните 30 дни преди началото на брошурата (15 дни за кисело мляко, прясно мляко и хляб) - не може да влезе в брошурата и свети в червено.","Регулярна надценка 25,2% → промо надценка най-много 25,2%"],
  shelf:["Рафт сега","Цената, на която артикулът се продава в магазина днес. Идва от Мистрал (основната ценова листа).","Bolgare Мерло: 4,20 €"],
  approved:["Промо рафт","Цената в брошурата - тя е решението на Асен. Пише се с ДДС, както ще е на етикета.","4,20 € → 3,36 €"],
  off:["Отстъпка %","Колко по-евтино е промо цената от сегашната. Може да пишеш процента вместо цената - системата смята цената сама.","1 − 3,36 ÷ 4,20 = 20%"],
- margin:["Марж","Колко печелим от всяко евро продажба по време на брошурата: (промо рафт − промо доставна) ÷ промо рафт. Зелено над 22%, жълто 15–22%, червено под 15%.<br><br><b>(сега X%)</b> - маржът днес, без промоция.<br><b>без Д.Т.О.</b> - ако доставчикът не даде отстъпка (най-лошият случай).<br><b>с искането 20%</b> - ако доставчикът приеме исканата от нас цена.","(3,36 − 3,141) ÷ 3,36 = 6,5% без Д.Т.О."],
- avgmargin:["Среден марж","Средният марж на всички артикули в бланката. Ако доставчикът още не е дал отстъпка, се смята без нея.","4 вина × 6,5% = 6,5%"],
- funded:["Доплащаме","Колко пари даваме ние от нашия марж: (сегашна цена − промо цена) − отстъпката на доставчика, умножено по продадените бройки за 15 дни в регионите на брошурата.","(4,20 − 3,36) − 0 = 0,84 €/бр. × 21 бр. = 18 €"],
- need:["Искаме доставна","Каква промо доставна цена да поискаме от доставчика, за да имаме поне 20% марж при одобрената цена на рафта. В скоби е каква Д.Т.О. означава това спрямо редовната му цена.","3,36 × 0,80 = 2,688 € → Д.Т.О. 14,4% от 3,141"],
+ margin:["Надценка","Реалната надценка върху доставната цена по време на брошурата: (промо рафт − промо доставна) ÷ промо доставна. Зелено от 25% нагоре, жълто 20–25%, червено под 20%.<br><br><b>(сега X%)</b> - надценката днес, без промоция: (рафт − редовна доставна) ÷ редовна доставна.<br><b>без Д.Т.О.</b> - ако доставчикът не даде отстъпка (най-лошият случай).<br><b>с искането 20%</b> - ако доставчикът приеме исканата от нас цена.","(3,36 − 3,141) ÷ 3,141 = 7,0% без Д.Т.О."],
+ avgmargin:["Средна надценка","Средната надценка на всички артикули в бланката. Ако доставчикът още не е дал отстъпка, се смята без нея.","4 вина × 7,0% = 7,0%"],
+ funded:["Доплащаме","Колко пари даваме ние от нашата надценка: (сегашна цена − промо цена) − отстъпката на доставчика, умножено по продадените бройки за 15 дни в регионите на брошурата.","(4,20 − 3,36) − 0 = 0,84 €/бр. × 21 бр. = 18 €"],
+ need:["Искаме доставна","Каква промо доставна цена да поискаме от доставчика, за да имаме поне 20% надценка при одобрената цена на рафта: промо рафт ÷ 1,20. В скоби е каква Д.Т.О. означава това спрямо редовната му цена.","3,36 ÷ 1,20 = 2,80 € → Д.Т.О. 10,9% от 3,141"],
  sales:["Продажби 15 д.","Продадени бройки за последните 15 дни - отделно Варна и София. От касовите бонове в MinMaxAI.","Мерло: Варна 21, София 4"],
  stock:["Наличност","Бройки в магазините в момента и в колко магазина се продава. От MinMaxAI.","116 бр. в 15 магазина"],
- margin30:["Марж каса","Истинският марж от касата за 15 дни - след всички намаления и акции. Сравни го с маржа в брошурата.","22,4%"],
+ margin30:["Надценка каса","Истинската надценка от касата за 15 дни: (оборот − себестойност) ÷ себестойност, след всички намаления и акции. Сравни я с надценката в брошурата.","22,4%"],
  lastpromo:["Последна брошура","Кога е бил в брошура последно, с каква отстъпка и цена. ×2,3 значи, че по време на брошурата се е продавал 2,3 пъти повече на ден, отколкото 14 дни преди нея.","01.10–15.10, −15%, ×2,3"],
  checks:["Проверки ⚠","Системата сама търси грешки: цена без ДДС, голяма разлика с последната доставка, промо цена под доставната, отстъпка, въведена като цена и т.н. Червеното трябва да се провери, преди да се изпрати.",""],
  base:["Базова цена с ДДС","Цената от ценоразписа на доставчика - първата цена в неговата бланка.","3,49 €"],
  to:["Т.О. %","Търговската отстъпка по договор. Редовната доставна = базова − Т.О. Системата я смята сама.","3,49 − 10% = 3,141 €"],
  reg:["Редовна доставна","Какво плащаме на доставчика нормално, с ДДС. Пише откъде е: доставчик, офис, запомнена или Мистрал (последна доставка). Поправката се запомня за следващата брошура.","3,141 €"],
- dto:["Д.Т.О. %","Допълнителната отстъпка, която доставчикът дава за брошурата. Промо доставната = редовна − Д.Т.О. Пиши процента - цената се смята сама. Ако фирмата няма Д.Т.О., напиши 0 - тогава в бланката не искаме отстъпка. Празно поле = системата сама слага исканата Д.Т.О. за 20% марж.","3,141 − 8% = 2,8897 €"],
+ dto:["Д.Т.О. %","Допълнителната отстъпка, която доставчикът дава за брошурата. Промо доставната = редовна − Д.Т.О. Пиши процента - цената се смята сама. Ако фирмата няма Д.Т.О., напиши 0 - тогава в бланката не искаме отстъпка. Празно поле = системата сама слага исканата Д.Т.О. за 20% надценка.","3,141 − 8% = 2,8897 €"],
  promo:["Промо доставна","Какво плащаме на доставчика през периода на промо цените. Ако я напишеш, системата смята Д.Т.О. сама.","2,8897 €"],
  comp:["Компенсация/бр.","При бланка за компенсация: колко ни връща доставчикът за всяка продадена бройка. Промо доставната = редовна − компенсация.","0,702 €"],
  code:["Наш код","Кодът на артикула в Мистрал. Ако системата не го е намерила по баркода, напиши го и тя ще дотегли всичко останало.","14220"],
@@ -538,8 +538,8 @@ function renderHelp(){
   const forAsen=`<div class="card hdoc"><h2>За Асен - как решаваш</h2><ol>
      <li>Получаваш известие на телефона (от приложението „Брошури“) и го натискаш.</li>
      <li>Гледаш продажбите (Варна/София), наличността и как е вървял в миналата брошура.</li>
-     <li>Пишеш <b>Промо рафт</b> (или % отстъпка). Маржът се смята веднага.</li>
-     <li>Ако маржът е червен - натисни <b>Контраоферта</b> и напиши бележка (напр. „искаме Д.Т.О. 15%“). Системата вече е сметнала каква доставна цена да поискаме.</li>
+     <li>Пишеш <b>Промо рафт</b> (или % отстъпка). Надценката се смята веднага.</li>
+     <li>Ако надценката е червена - натисни <b>Контраоферта</b> и напиши бележка (напр. „искаме Д.Т.О. 15%“). Системата вече е сметнала каква доставна цена да поискаме.</li>
      <li>Избираш формат (каре, А5, А4) и <b>Одобри</b> / <b>Контраоферта</b> / <b>Откажи</b>.</li>
      <li>Натискаш <b>„Запис и връщане към Габи“</b>. Празните Д.Т.О. се попълват автоматично (в червено, „авто“), а Габи ги проверява и праща бланката на доставчика.</li></ol>
      ${dl(["shelf","approved","off","margin","need","funded","sales","stock","margin30","lastpromo","checks"])}</div>`;
@@ -591,7 +591,7 @@ function drawKzp(){
      return h+`<div class="item${x.blocked?" is-blocked":" is-kzp"}" style="margin:6px 0">
        <div class="kzpbar"><span class="kzptag">КЗП</span>${x.blocked?`<b class="g-bad">не може · свободен от ${fd(x.free_from)}</b>`:`<b class="g-ok">може в брошурата</b>`}${x.perishable?`<span>малотраен · 15 дни</span>`:""}</div>
        <div><div class="it-n">${esc(x.name)}</div><div class="code"><b>${x.code}</b>${x.firm?` · ${esc(x.firm)}`:""}</div></div>
-       <div class="prices">${x.sales30!=null?`<span>Продажби 15 д. <b>${x.sales30}</b></span>`:""}${x.margin30!=null?`<span>Марж каса <b>${f(x.margin30,1)}%</b></span>`:""}${x.stock!=null?`<span>Наличност <b>${x.stock}</b></span>`:""}</div>
+       <div class="prices">${x.sales30!=null?`<span>Продажби 15 д. <b>${x.sales30}</b></span>`:""}${x.margin30!=null?`<span>Надценка каса <b>${f(x.margin30,1)}%</b></span>`:""}${x.stock!=null?`<span>Наличност <b>${x.stock}</b></span>`:""}</div>
        ${x.activations.length?`<div class="prices">${x.activations.map(a=>`<span class="g-bad">Активация ${fd(a.start)}–${fd(a.end)}${a.discount?` (−${f(a.discount,0)}%)`:""}${a.price?` ${f(a.price)} €`:""}</span>`).join("")}</div>`:""}
      </div>`}).join("")||`<div class="muted">Няма такива артикули.</div>`}</div>`;
   $("#kd").onchange=()=>renderKzp($("#kd").value);
@@ -661,8 +661,8 @@ const TOURS={
    [".list .row-f","Отвори бланка","Натисни бланка, за да видиш как се слагат цените."]],
   form:[
    ['.item [data-k="approved"]',"Промо цената","Пишеш цената на рафта в брошурата. Или процент в „Отстъпка %“ - цената се смята сама."],
-   [".item .mg","Марж","Сметнат веднага. Зелено над 22%, жълто 15-22%, червено под 15%. При КЗП не може да е над регулярния."],
-   ['[data-h="need"]',"Какво искаме от доставчика","Каква доставна цена ни трябва за 20% марж - тя отива автоматично в бланката към доставчика."],
+   [".item .mg","Надценка","Реалната надценка върху доставната, сметната веднага. Зелено от 25%, жълто 20-25%, червено под 20%. При КЗП не може да е над регулярната."],
+   ['[data-h="need"]',"Какво искаме от доставчика","Каква доставна цена ни трябва за 20% надценка - тя отива автоматично в бланката към доставчика."],
    ["[data-st]","Решение","Одобри, Контраоферта или Откажи. Може и бележка към доставчика."],
    ["#ret","Запис","Накрая натискаш тук - бланката се връща при Габи с твоите цени и тя я праща. Готово! 🎉"]]}
 };

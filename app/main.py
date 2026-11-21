@@ -375,22 +375,22 @@ def _item_calc(it: dict, kind: str) -> dict:
     if sup_gives is None and kind != "comp" and reg is not None:
         sup_gives = 0.0   # доставчикът още не е дал отстъпка - цялото намаление е наше
     it["cost"] = cost
-    it["margin"] = round((app_ - cost) / app_ * 100, 1) if app_ and cost is not None else None
+    it["margin"] = round((app_ - cost) / cost * 100, 1) if app_ and cost else None   # надценка върху доставната
     # ако доставчикът още не е дал промо цена - маржът при сегашната редовна доставна (най-лошият случай)
-    it["margin_at_reg"] = round((app_ - reg) / app_ * 100, 1) if app_ and reg is not None else None
+    it["margin_at_reg"] = round((app_ - reg) / reg * 100, 1) if app_ and reg else None
     it["margin_best"] = it["margin"] if it["margin"] is not None else it["margin_at_reg"]
-    it["reg_margin"] = round((shelf - reg) / shelf * 100, 1) if shelf and reg is not None else None
+    it["reg_margin"] = round((shelf - reg) / reg * 100, 1) if shelf and reg else None
     it["off_pct"] = round((1 - app_ / shelf) * 100) if app_ and shelf else None
     it["funded"] = round((shelf - app_) - sup_gives, 4) if app_ and shelf and sup_gives is not None else None
     # каква промо доставна цена ни трябва, за да имаме MIN_MARGIN при тази рафтова цена
-    it["need_delivery"] = round(app_ * (1 - MIN_MARGIN / 100), 4) if app_ else None
+    it["need_delivery"] = round(app_ / (1 + MIN_MARGIN / 100), 4) if app_ else None
     it["need_dto"] = round((1 - it["need_delivery"] / reg) * 100, 1) if app_ and reg else None
     it["min_margin"] = MIN_MARGIN
     k = it.get("kzp")
     if k:
         # КЗП: маржът в промоцията не може да надминава регулярния марж
-        it["kzp_max_price"] = (int(cost / (1 - it["reg_margin"] / 100) * 100 + 1e-6) / 100
-                               if cost is not None and it["reg_margin"] is not None and it["reg_margin"] < 100 else None)
+        it["kzp_max_price"] = (int(cost * (1 + it["reg_margin"] / 100) * 100 + 1e-6) / 100
+                               if cost is not None and it["reg_margin"] is not None else None)
         it["kzp_ok_margin"] = (it["margin"] is None or it["reg_margin"] is None
                                or it["margin"] <= it["reg_margin"] + 0.05)
     it["checks"] = checks(it, kind)
@@ -411,7 +411,7 @@ def checks(it: dict, kind: str) -> list[str]:
                        f"{(' (-' + format(a['discount'], '.0f') + '%)') if a.get('discount') else ''} в последните "
                        f"{k['days']} дни преди брошурата - НЕ може да влезе в брошурата.")
         if not it.get("kzp_ok_margin"):
-            out.append(f"КЗП: маржът в промоцията {it['margin']:.1f}% е по-голям от регулярния {it['reg_margin']:.1f}%. "
+            out.append(f"КЗП: надценката в промоцията {it['margin']:.1f}% е по-голяма от регулярната {it['reg_margin']:.1f}%. "
                        f"Промо цената трябва да е най-много {it['kzp_max_price']:.2f} €.")
     if base is not None and reg is not None and it.get("to_pct") is not None:
         calc = base * (1 - float(it["to_pct"]) / 100)
@@ -694,7 +694,7 @@ def return_to_office(fid: int, user: dict = Depends(need("approver"))):
         target = MIN_MARGIN
         if it.get("kzp") and it.get("reg_margin") is not None:
             target = min(target, float(it["reg_margin"]))
-        need = app_ * (1 - target / 100)
+        need = app_ / (1 + target / 100)
         dto = max(0.0, round((1 - need / reg) * 100, 1))
         db.q("UPDATE items SET dto_pct=:d, promo=:p, dto_src='авто' WHERE id=:id",
              d=dto, p=round(reg * (1 - dto / 100), 4), id=it["id"])
@@ -771,6 +771,25 @@ def original(fid: int, user: dict = Depends(me)):
 def health():
     return {"ok": True, "mistral": mistral.regions(), "mail": bool(os.getenv("IMAP_HOST")),
             "ai": bool(os.getenv("ANTHROPIC_API_KEY"))}
+
+
+@app.post("/api/admin/recalc-auto-dto")
+def recalc_auto_dto(user: dict = Depends(need())):
+    """Преизчислява автоматичните Д.Т.О. (неизпратени бланки) по формулата с надценка."""
+    n = 0
+    for f in db.rows("SELECT id FROM forms WHERE sent_at IS NULL AND kind <> 'comp'"):
+        fm = get_form(f["id"], user)
+        for it in fm["items"]:
+            if it.get("dto_src") != "авто" or it.get("approved") is None or not it.get("reg"):
+                continue
+            reg, app_ = float(it["reg"]), float(it["approved"])
+            target = MIN_MARGIN
+            if it.get("kzp") and it.get("reg_margin") is not None:
+                target = min(target, float(it["reg_margin"]))
+            dto = max(0.0, round((1 - app_ / (1 + target / 100) / reg) * 100, 1))
+            db.q("UPDATE items SET dto_pct=:d, promo=:p WHERE id=:id", d=dto, p=round(reg * (1 - dto / 100), 4), id=it["id"])
+            n += 1
+    return {"recalculated": n}
 
 
 @app.get("/api/admin/probe")

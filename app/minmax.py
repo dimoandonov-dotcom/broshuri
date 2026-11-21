@@ -48,7 +48,7 @@ def info(codes: list[int]) -> tuple[dict[int, dict], list[str]]:
                 o["mm_varna"] = o["mm_sales30"] - o["mm_sofia"]
                 o["mm_stores"] = int(st or 0)
                 if rev and float(rev) > 0:
-                    o["margin30"] = round(100 * (float(rev) - float(cost or 0)) / float(rev), 1)
+                    o["margin30"] = round(100 * (float(rev) - float(cost)) / float(cost), 1) if cost else None
             for code, q in c.execute(text("SELECT code, SUM(qty) FROM sa_stock WHERE code = ANY(:c) GROUP BY code"),
                                      {"c": codes}):
                 out[code]["stock"] = int(round(float(q or 0)))
@@ -110,7 +110,7 @@ def articles(supplier: str) -> list[dict]:
         tot, sof = int(round(float(r["sales30"]))), int(round(float(r["sofia"])))
         out.append({"code": r["code"], "name": r["name"], "grp": r["grp"], "sales30": tot,
                     "varna": tot - sof, "sofia": sof,
-                    "margin30": round(100 * (rev - float(r["cost"] or 0)) / rev, 1) if rev > 0 else None})
+                    "margin30": round(100 * (rev - float(r["cost"])) / float(r["cost"]), 1) if r["cost"] and float(r["cost"]) > 0 else None})
     extra, _ = info([r["code"] for r in out[:150]])
     for r in out:
         x = extra.get(r["code"], {})
