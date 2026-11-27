@@ -143,8 +143,26 @@ def purchase_prices(codes: list[int]) -> dict[int, dict]:
     for code, rows in dl.items():
         ws = [(s - td(days=7), e + td(days=7), s, e) for s, e in win.get(code, [])]
         inside = lambda d: next((w for w in ws if w[0] <= d <= w[1]), None)  # noqa: E731
-        reg = [p for d, p in rows if d >= cut and not inside(d)]
+        regrows = sorted(((d, p) for d, p in rows if d >= cut and not inside(d)), reverse=True)
+        reg = [p for d, p in regrows]
         o = {"reg": round(_median(reg), 4) if reg else None}
+        if regrows:
+            # сегашното ниво = последните 6 доставки; ако се различава от по-старите - цената е сменена
+            now = _median([p for d, p in regrows[:6]])
+            same = lambda p: abs(p / now - 1) <= 0.02  # noqa: E731
+            start, run_old = None, 0
+            for d, p in regrows:
+                if same(p):
+                    start, run_old = d, 0
+                else:
+                    run_old += 1
+                    if run_old >= 5:
+                        break
+            old = [p for d, p in regrows if start and d < start and not same(p)]
+            if old and len(old) >= 3:
+                prev = _median(old)
+                if abs(now / prev - 1) > 0.02:
+                    o.update(reg=round(now, 4), prev=round(prev, 4), since=start)
         for w in ws:  # най-новата брошура, в която има доставки
             pr = [p for d, p in rows if w[0] <= d <= w[1]]
             if pr:
@@ -168,8 +186,8 @@ def enrich_form(form_id: int) -> list[str]:
     buys = purchase_prices([r["code"] for r in res if r.get("code")])
     for r in res:
         b = buys.get(r.get("code") or -1, {})
-        db.q("UPDATE items SET buy_reg=:a, buy_promo=:b, buy_promo_period=:c WHERE id=:id",
-             a=b.get("reg"), b=b.get("promo"), c=b.get("period"), id=r["id"])
+        db.q("""UPDATE items SET buy_reg=:a, buy_promo=:b, buy_promo_period=:c, buy_prev=:p, buy_from=:s WHERE id=:id""",
+             a=b.get("reg"), b=b.get("promo"), c=b.get("period"), p=b.get("prev"), s=b.get("since"), id=r["id"])
     for r in res:
         x = mm.get(r.get("code") or -1, {})
         if x.get("mm_sales30") is not None:
@@ -431,6 +449,16 @@ def checks(it: dict, kind: str) -> list[str]:
         if abs(reg - net) / net < 0.06 and vat:
             out.append(f"Редовната цена {reg:.4f} изглежда БЕЗ ДДС (средна покупна без ДДС {net:.4f}). "
                        f"С ДДС {vat:.0f}% е {reg * (1 + vat / 100):.4f}.")
+        bp = n("buy_prev")
+        if bp and it.get("buy_reg") and abs(n("buy_reg") / bp - 1) > 0.02:
+            ch = (n("buy_reg") / bp - 1) * 100
+            fr = it.get("buy_from")
+            fr = f"{fr:%d.%m}" if hasattr(fr, "strftime") else (str(fr)[8:10] + "." + str(fr)[5:7] if fr else "")
+            out.append(f"{'ВДИГНАТА' if ch > 0 else 'НАМАЛЕНА'} ЦЕНА от {fr}: купувахме по {bp:.4f}, сега купуваме по "
+                       f"{n('buy_reg'):.4f} ({ch:+.1f}%)."
+                       + (" Бланката е с новата цена." if abs(diff) <= 1 else ""))
+        if abs(reg - net) / net < 0.06 and vat:
+            pass
         elif diff > 1:
             out.append(f"ВДИГНАТА ЦЕНА: в бланката редовната е {reg:.4f}, а "
                        f"{'редовно купуваме по' if it.get('buy_reg') else 'средната ни покупна цена в Мистрал е'} "
